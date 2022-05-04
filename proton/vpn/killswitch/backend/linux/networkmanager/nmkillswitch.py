@@ -1,7 +1,8 @@
 from proton.vpn.backend.linux.networkmanager.dbus import NetworkManagerBus
 from proton.vpn.killswitch import KillSwitch
 from proton.vpn.killswitch.enums import KillSwitchStateEnum
-
+from proton.vpn.killswitch.exceptions import (KillSwitchStartError,
+                                              KillSwitchStopError)
 
 from .constants import (KILLSWITCH_CONN_NAME, KILLSWITCH_DNS_PRIORITY_VALUE,
                         KILLSWITCH_INTERFACE_NAME, ROUTED_CONN_NAME,
@@ -41,10 +42,15 @@ class NMKillSwitch(KillSwitch):
         ) or self.state == KillSwitchStateEnum.OFF:
             self.__ensure_killswitch_is_not_running()
         else:
-            if "server_ip" not in kwargs:
-                raise RuntimeError("Missing server IP for kill switch")
+            key = "server_ip"
+            if key not in kwargs:
+                raise KeyError("Missing key `{}`".format(key))
 
-            self.__ensure_killswitch_only_allows_specific_routes(kwargs.get("server_ip"))
+            value = kwargs.get(key)
+            if value is None:
+                raise TypeError("Missing value for key `{}`".format(key))
+
+            self.__ensure_killswitch_only_allows_specific_routes(value)
 
     def _on_connected(self, **kwargs):
         if self.state == KillSwitchStateEnum.ON and (self.permanent or not self.permanent):
@@ -80,7 +86,7 @@ class NMKillSwitch(KillSwitch):
         attempts = 3
 
         while attempts > 0:
-            conn = self._nm_bus.get_network_manager().search_for_connection(interface_name=KILLSWITCH_INTERFACE_NAME)
+            conn = self._nm_bus.get_network_manager().search_for_connection(interface_name=ks_interface_name)
             if not conn:
                 self.__activate_killswitch_connection()
             else:
@@ -90,7 +96,11 @@ class NMKillSwitch(KillSwitch):
             attempts -= 1
 
         if not is_killswitch_running:
-            raise RuntimeError("Unable to enable kill switch")
+            raise KillSwitchStartError(
+                "Unable to start kill switch with interface {}".format(
+                    self.ks_interface_name
+                )
+            )
 
     def __ensure_killswitch_only_allows_specific_routes(self, server_ip):
         self.__activate_routed_killswitch_connection(server_ip)
@@ -113,7 +123,7 @@ class NMKillSwitch(KillSwitch):
             attempts -= 1
 
         if is_killswitch_running:
-            raise RuntimeError("Unable to delete kill switch with interface {}".format(interface_name))
+            raise KillSwitchStopError("Unable to stop kill switch with interface {}".format(interface_name))
 
     def __activate_killswitch_connection(self):
         nmbus = NetworkManagerBus()
