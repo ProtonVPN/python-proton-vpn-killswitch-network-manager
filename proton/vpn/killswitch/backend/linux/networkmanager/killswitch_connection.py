@@ -1,62 +1,36 @@
-from proton.vpn.backend.linux.networkmanager.dbus import DbusConnection, NetworkManagerBus
+from proton.vpn.backend.linux.networkmanager.dbus import (DbusConnection,
+                                                          NetworkManagerBus)
+from proton.vpn.killswitch.exceptions import (KillSwitchStartError,
+                                              KillSwitchStopError)
 
 
-class BaseKillSwitchConnectionType:
-    """Base class for easy kill switch connection management."""
-    human_readable_id = None
-    interface_name = None
+class KillSwitchConfig:
+    """This kill switch connection will block all connections to the outside
+    based on a provided server IP list, passed to IPv4_addresses."""
+    human_readable_id = "pvpn-routed-killswitch"
+    interface_name = "pvpnroutintrf0"
 
-    ipv4_address_data = None
-    ipv4_addresses = None
-    ipv4_method = None
-    ipv4_dns = None
-    ipv4_dns_priority = -1500
-    ipv4_gateway = None
-    ipv4_ignore_auto_dns = None
-    ipv4_route_metric = 98
+    ipv4_addresses = [("100.85.0.1", 24, "100.85.0.1")]
+    ipv4_method = "manual"
+    ipv4_dns = ["0.0.0.0"]
+    ipv4_gateway = "100.85.0.1"
+    ipv4_ignore_auto_dns = True
 
-    ipv6_address_data = None
-    ipv6_addresses = None
-    ipv6_method = None
-    ipv6_dns = None
-    ipv6_dns_priority = -1500
-    ipv6_gateway = None
-    ipv6_ignore_auto_dns = None
-    ipv6_route_metric = 98
+    ipv6_address_data = {"address": "fdeb:446c:912d:08da::", "prefix": 64}
+    ipv6_addresses = [("fdeb:446c:912d:08da::", 64, "fdeb:446c:912d:08da::1")]
+    ipv6_method = "manual"
+    ipv6_dns = ["::1"]
+    ipv6_gateway = "fdeb:446c:912d:08da::1"
+    ipv6_ignore_auto_dns = True
 
-    def __init__(self):
+    def __init__(self, server_ip=None):
         self.__ks_conn = DbusConnection()
-        self.__nmbus = NetworkManagerBus()
+        if server_ip:
+            self.__ks_conn.ipv4_addresses = self.__format_subnet_list(
+                self.__generate_subnet_list(server_ip)
+            )
 
-    def add(self):
-        if self.is_killswitch_connection_active:
-            return True
-
-        nm_settings = self.__nmbus.get_network_manager_settings()
-
-        if not nm_settings.add_connection(self.__generate_connection_config()):
-            return False
-
-        return True
-
-    def remove(self):
-        conn = self.is_killswitch_connection_active
-        if not conn:
-            return True
-
-        conn.delete_connection()
-
-        if self.is_killswitch_connection_active:
-            return False
-
-        return True
-
-    @property
-    def is_killswitch_connection_active(self) -> "ConnectionSettingsAdapter":
-        conn = self.__nmbus.get_network_manager().search_for_connection(interface_name=self.interface_name)
-        return conn if conn else None
-
-    def __generate_connection_config(self):
+    def generate_connection_config(self):
         """Non modifieable dbus connection object.
 
         Modifying the object that is returned here will not take
@@ -89,45 +63,77 @@ class BaseKillSwitchConnectionType:
         self.__ks_conn.ipv6.ignore_auto_dns = self.ipv6_ignore_auto_dns
         self.__ks_conn.ipv6.route_metric = self.ipv6_route_metric
 
+    def __format_subnet_list(self, subnet_list):
+        """
+            :param subnet_list: list with string ip with prefix
+                ["192.168.1.2/24", ...]
+            :type subnet_list: list(str)
+            :return: tuple within list with ip, prefix and gateway
+                 properly formatted for dbus connections
+            :rtype: list(tuple(str, int, str))
+        """
+        formatted_data = [
+                (
+                    route.split("/")[0],
+                    int(route.split("/")[1]),
+                    route.split("/")[0]
+                ) for route in [str(ipv4) for ipv4 in subnet_list]
+            ]
 
-class FullKillSwitch(BaseKillSwitchConnectionType):
-    """This kill switch connection will block all connections
-    to the outside."""
-    human_readable_id = "pvpn-killswitch"
-    interface_name = "pvpnksintrf0"
+        return formatted_data
 
-    ipv4_address_data = {"address": "100.85.0.1", "prefix": 24}
-    ipv4_addresses = [("100.85.0.1", 24, "100.85.0.1")]
-    ipv4_method = "manual"
-    ipv4_dns = ["0.0.0.0"]
-    ipv4_dns_priority = -1500
-    ipv4_gateway = "100.85.0.1"
-    ipv4_ignore_auto_dns = True
-    ipv4_route_metric = 98
-
-    ipv6_address_data = {"address": "fdeb:446c:912d:08da::", "prefix": 64}
-    ipv6_addresses = [("fdeb:446c:912d:08da::", 64, "fdeb:446c:912d:08da::1")]
-    ipv6_method = "manual"
-    ipv6_dns = ["::1"]
-    ipv6_dns_priority = -1500
-    ipv6_gateway = "fdeb:446c:912d:08da::1"
-    ipv6_ignore_auto_dns = True
-    ipv6_route_metric = 98
+    def __generate_subnet_list(self, server_ip):
+        """
+            :param server_ip: vpn server ip
+            :type server_ip: str
+            :return: list with ip that should be included
+            :rtype: list(str)
+        """
+        import ipaddress
+        return list(
+            ipaddress.ip_network(
+                '0.0.0.0/0'
+            ).address_exclude(ipaddress.ip_network(server_ip))
+        )
 
 
-class RoutedKillSwitch(BaseKillSwitchConnectionType):
-    """This kill switch connection will block all connections to the outside
-    based on a provided server IP list, passed to IPv4_addresses."""
-    human_readable_id = "pvpn-routed-killswitch"
-    interface_name = "pvpnroutintrf0"
-    ipv4_method = "manual"
-    ipv4_dns = ["0.0.0.0"]
-    ipv4_gateway = "100.85.0.1"
-    ipv4_ignore_auto_dns = True
+class KillSwitchConnectionHandler:
+    """Kill switch connection management."""
+    def add(self, killswitch_config: KillSwitchConfig):
+        conn = self.is_killswitch_connection_active(killswitch_config.interface_name)
 
-    ipv6_address_data = {"address": "fdeb:446c:912d:08da::", "prefix": 64}
-    ipv6_addresses = [("fdeb:446c:912d:08da::", 64, "fdeb:446c:912d:08da::1")]
-    ipv6_method = "manual"
-    ipv6_dns = ["::1"]
-    ipv6_gateway = "fdeb:446c:912d:08da::1"
-    ipv6_ignore_auto_dns = True
+        try:
+            if conn:
+                conn.update_settings(killswitch_config.generate_connection_config())
+        except: # noqa
+            # TO-DO: log e exception
+            raise KillSwitchStartError(
+                "Unable to start kill switch with interface {}. Check NetworkManager syslogs".format(
+                    killswitch_config.interface_name
+                )
+            )
+
+        nm_settings = NetworkManagerBus().get_network_manager_settings()
+        if not nm_settings.add_connection(killswitch_config.generate_connection_config()):
+            raise KillSwitchStartError(
+                "Unable to start kill switch with interface {}. Check NetworkManager syslogs".format(
+                    killswitch_config.interface_name
+                )
+            )
+
+    def remove(self, interface_name):
+        conn = self.is_killswitch_connection_active(interface_name)
+        if not conn:
+            return
+
+        conn.delete_connection()
+        if self.is_killswitch_connection_active(interface_name):
+            raise KillSwitchStopError(
+                "Unable to stop kill switch with interface {}. Check NetworkManager syslogs".format(
+                    interface_name
+                )
+            )
+
+    def is_killswitch_connection_active(self, interface_name) -> "ConnectionSettingsAdapter":
+        conn = NetworkManagerBus().get_network_manager().search_for_connection(interface_name=interface_name)
+        return conn if conn else None
