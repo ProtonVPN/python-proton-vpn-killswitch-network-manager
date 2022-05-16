@@ -2,6 +2,7 @@ from proton.vpn.backend.linux.networkmanager.dbus import (DbusConnection,
                                                           NetworkManagerBus)
 from proton.vpn.killswitch.exceptions import (KillSwitchStartError,
                                               KillSwitchStopError)
+import dbus.exceptions
 
 
 class KillSwitchConfig:
@@ -105,16 +106,25 @@ class KillSwitchConnectionHandler:
         try:
             if conn:
                 conn.update_settings(killswitch_config.generate_connection_config())
-        except: # noqa
-            # TO-DO: log e exception
+        except dbus.exceptions.DBusException as e:
             raise KillSwitchStartError(
                 "Unable to start kill switch with interface {}. Check NetworkManager syslogs".format(
                     killswitch_config.interface_name
                 )
-            )
+            ) from e
 
         nm_settings = NetworkManagerBus().get_network_manager_settings()
-        if not nm_settings.add_connection(killswitch_config.generate_connection_config()):
+        nm_conn = None
+        try:
+            nm_conn = nm_settings.add_connection(killswitch_config.generate_connection_config())
+        except dbus.exceptions.DBusException as e:
+            raise KillSwitchStartError(
+                "Unable to start kill switch with interface {}. Check NetworkManager syslogs".format(
+                    killswitch_config.interface_name
+                )
+            ) from e
+
+        if not nm_conn:
             raise KillSwitchStartError(
                 "Unable to start kill switch with interface {}. Check NetworkManager syslogs".format(
                     killswitch_config.interface_name
@@ -126,7 +136,15 @@ class KillSwitchConnectionHandler:
         if not conn:
             return
 
-        conn.delete_connection()
+        try:
+            conn.delete_connection()
+        except dbus.exceptions.DBusException as e:
+            raise KillSwitchStopError(
+                "Unable to stop kill switch with interface {}. Check NetworkManager syslogs".format(
+                    interface_name
+                )
+            ) from e
+
         if self.is_killswitch_connection_active(interface_name):
             raise KillSwitchStopError(
                 "Unable to stop kill switch with interface {}. Check NetworkManager syslogs".format(
