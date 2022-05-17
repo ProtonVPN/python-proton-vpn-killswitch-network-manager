@@ -12,7 +12,7 @@ setup(
     packages=find_namespace_packages(include=['proton.vpn.killswitch.backend.linux.networkmanager']),
     include_package_data=True,
     python_requires=">=3.8",
-    install_requires=["proton-core", "proton-vpn-killswitch", "proton-vpn-network-manager", "dbus-python"],
+    install_requires=["proton-vpn-killswitch", "proton-vpn-network-manager", "dbus-python"],
     extras_require={
         "test": ["wheel", "pytest"]
     },
