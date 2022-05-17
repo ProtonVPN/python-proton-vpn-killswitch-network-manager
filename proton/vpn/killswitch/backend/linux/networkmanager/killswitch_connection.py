@@ -1,8 +1,7 @@
 from proton.vpn.backend.linux.networkmanager.dbus import (DbusConnection,
                                                           NetworkManagerBus)
-from proton.vpn.killswitch.exceptions import (KillSwitchStartError,
-                                              KillSwitchStopError)
-import dbus.exceptions
+from proton.vpn.backend.linux.networkmanager.dbus.exceptions import ProtonDbusException
+from proton.vpn.killswitch.exceptions import KillSwitchError
 
 
 class KillSwitchConfig:
@@ -11,27 +10,37 @@ class KillSwitchConfig:
     human_readable_id = "pvpn-routed-killswitch"
     interface_name = "pvpnroutintrf0"
 
+    ipv4_address_data = [{"address": "100.85.0.1", "prefix": 24}]
     ipv4_addresses = [("100.85.0.1", 24, "100.85.0.1")]
     ipv4_method = "manual"
     ipv4_dns = ["0.0.0.0"]
+    ipv4_dns_priority = -1500
     ipv4_gateway = "100.85.0.1"
     ipv4_ignore_auto_dns = True
+    ipv4_route_metric = 98
 
-    ipv6_address_data = {"address": "fdeb:446c:912d:08da::", "prefix": 64}
+    ipv6_address_data = [{"address": "fdeb:446c:912d:08da::", "prefix": 64}]
     ipv6_addresses = [("fdeb:446c:912d:08da::", 64, "fdeb:446c:912d:08da::1")]
     ipv6_method = "manual"
     ipv6_dns = ["::1"]
+    ipv6_dns_priority = -1500
     ipv6_gateway = "fdeb:446c:912d:08da::1"
     ipv6_ignore_auto_dns = True
+    ipv6_route_metric = 98
 
     def __init__(self, server_ip=None):
         self.__ks_conn = DbusConnection()
         if server_ip:
-            self.__ks_conn.ipv4_addresses = self.__format_subnet_list(
+            self.ipv4_addresses = self.__format_subnet_list(
                 self.__generate_subnet_list(server_ip)
             )
 
-    def generate_connection_config(self):
+    def update_ipv4_addresses(self, server_ip: str):
+        self.ipv4_addresses = self.__format_subnet_list(
+            self.__generate_subnet_list(server_ip)
+        )
+
+    def generate_connection_config(self) -> "dbus.Dictionary":
         """Non modifieable dbus connection object.
 
         Modifying the object that is returned here will not take
@@ -64,7 +73,7 @@ class KillSwitchConfig:
         self.__ks_conn.ipv6.ignore_auto_dns = self.ipv6_ignore_auto_dns
         self.__ks_conn.ipv6.route_metric = self.ipv6_route_metric
 
-    def __format_subnet_list(self, subnet_list):
+    def __format_subnet_list(self, subnet_list: list) -> list:
         """
             :param subnet_list: list with string ip with prefix
                 ["192.168.1.2/24", ...]
@@ -83,7 +92,7 @@ class KillSwitchConfig:
 
         return formatted_data
 
-    def __generate_subnet_list(self, server_ip):
+    def __generate_subnet_list(self, server_ip: str) -> list:
         """
             :param server_ip: vpn server ip
             :type server_ip: str
@@ -100,58 +109,52 @@ class KillSwitchConfig:
 
 class KillSwitchConnectionHandler:
     """Kill switch connection management."""
-    def add(self, killswitch_config: KillSwitchConfig):
-        conn = self.is_killswitch_connection_active(killswitch_config.interface_name)
 
-        try:
-            if conn:
-                conn.update_settings(killswitch_config.generate_connection_config())
-        except dbus.exceptions.DBusException as e:
-            raise KillSwitchStartError(
-                "Unable to start kill switch with interface {}. Check NetworkManager syslogs".format(
-                    killswitch_config.interface_name
-                )
-            ) from e
+    def __init__(self, killswitch_config: KillSwitchConfig = None):
+        if killswitch_config is None:
+            killswitch_config = KillSwitchConfig()
 
+        self.__killswtich_config = killswitch_config
+
+    def add(self):
         nm_settings = NetworkManagerBus().get_network_manager_settings()
-        nm_conn = None
+
         try:
-            nm_conn = nm_settings.add_connection(killswitch_config.generate_connection_config())
-        except dbus.exceptions.DBusException as e:
-            raise KillSwitchStartError(
+            nm_settings.add_connection(self.__killswtich_config.generate_connection_config())
+        except (RuntimeError, ProtonDbusException) as e:
+            raise KillSwitchError(
                 "Unable to start kill switch with interface {}. Check NetworkManager syslogs".format(
-                    killswitch_config.interface_name
+                    self.__killswtich_config.interface_name
                 )
             ) from e
 
-        if not nm_conn:
-            raise KillSwitchStartError(
-                "Unable to start kill switch with interface {}. Check NetworkManager syslogs".format(
-                    killswitch_config.interface_name
-                )
-            )
-
-    def remove(self, interface_name):
-        conn = self.is_killswitch_connection_active(interface_name)
-        if not conn:
-            return
+    def remove(self):
+        conn = self.is_killswitch_connection_active()
 
         try:
             conn.delete_connection()
-        except dbus.exceptions.DBusException as e:
-            raise KillSwitchStopError(
+        except ProtonDbusException as e:
+            raise KillSwitchError(
                 "Unable to stop kill switch with interface {}. Check NetworkManager syslogs".format(
-                    interface_name
+                    self.__killswtich_config.interface_name
                 )
             ) from e
 
-        if self.is_killswitch_connection_active(interface_name):
-            raise KillSwitchStopError(
-                "Unable to stop kill switch with interface {}. Check NetworkManager syslogs".format(
-                    interface_name
-                )
-            )
+    def update(self, server_ip: str):
+        conn = self.is_killswitch_connection_active()
 
-    def is_killswitch_connection_active(self, interface_name) -> "ConnectionSettingsAdapter":
-        conn = NetworkManagerBus().get_network_manager().search_for_connection(interface_name=interface_name)
-        return conn if conn else None
+        self.__killswtich_config.update_ipv4_addresses(server_ip)
+
+        try:
+            conn.update_settings(self.__killswtich_config.generate_connection_config())
+        except ProtonDbusException as e:
+            raise KillSwitchError(
+                "Unexpected kill switch state '{}'".format(
+                    self.__killswtich_config.interface_name
+                )
+            ) from e
+
+    def is_killswitch_connection_active(self) -> "ConnectionSettingsAdapter":
+        return NetworkManagerBus().get_network_manager().search_for_connection(
+            interface_name=self.__killswtich_config.interface_name
+        )

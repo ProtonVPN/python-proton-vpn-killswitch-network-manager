@@ -1,130 +1,53 @@
 from proton.vpn.killswitch import KillSwitch
 from proton.vpn.killswitch.backend.linux.networkmanager.killswitch_connection import (
-    KillSwitchConnectionHandler, KillSwitchConfig)
-from proton.vpn.killswitch.enums import KillSwitchStateEnum
-from proton.vpn.killswitch.exceptions import (KillSwitchStartError,
-                                              KillSwitchStopError,
-                                              UnexpectedKillSwitchStateError)
+    KillSwitchConfig, KillSwitchConnectionHandler)
+from proton.vpn.killswitch.exceptions import KillSwitchError
 
 
 class NMKillSwitch(KillSwitch):
-    ATTEMPTS = 5
 
-    @property
-    def _ks_handler(self):
-        try:
-            if self.__ks_handler is None:
-                self.__ks_handler = KillSwitchConnectionHandler()
-        except AttributeError:
-            self.__ks_handler = KillSwitchConnectionHandler()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._ks_handler = KillSwitchConnectionHandler()
 
-        return self.__ks_handler
-
-    def _on_disconnected(self, **kwargs):
-        if (
-            self.state == KillSwitchStateEnum.ON and not self.permanent_mode
-        ) or self.state == KillSwitchStateEnum.OFF:
-            self._disable()
-        else:
-            self._enable()
-
-    def _on_connecting(self, **kwargs):
-        if (
-            self.state == KillSwitchStateEnum.ON and not self.permanent_mode
-        ) or self.state == KillSwitchStateEnum.OFF:
-            self._disable()
-        else:
-            key = "server_ip"
-            if key not in kwargs:
-                raise KeyError("Missing key `{}`".format(key))
-
-            value = kwargs.get(key)
-            if value is None:
-                raise TypeError("Missing value for key `{}`".format(key))
-
-            self._enable(value)
-
-    def _on_connected(self, **kwargs):
-        if self.state == KillSwitchStateEnum.ON:
-            self._enable()
-        else:
-            self._disable()
-
-    def _disable(self):
-        self.__attempt_to_delete_killswitch_connection(KillSwitchConfig())
-
-    def _enable(self, server_ip=False):
+    def _enable(self, server_ip=None, **_):
         if server_ip:
-            killswitch_config = KillSwitchConfig(server_ip)
+            self.__update_with_server_ip(server_ip)
         else:
-            killswitch_config = KillSwitchConfig()
+            self.__enable()
 
-        self.__attempt_to_activate_killswitch(killswitch_config)
+    def _disable(self, **_):
+        self.__assert_killswitch_connection_exists()
 
-    def __attempt_to_activate_killswitch(self, killswitch_config: KillSwitchConfig):
-        """
-            :raises KillSwitchStartError: If unable to start kill switch connection
-        """
-        attempts = self.ATTEMPTS
+        if self._ks_handler.is_killswitch_connection_active():
+            self._ks_handler.remove()
+            self.__assert_killswitch_connection_does_not_exists()
 
-        while attempts > 0:
-            try:
-                self.__ensure_killswitch_connection_exists()
-            except UnexpectedKillSwitchStateError:
-                pass
-            else:
-                break
+    def __enable(self):
+        self.__assert_killswitch_connection_does_not_exists()
 
-            try:
-                self._ks_handler.add(killswitch_config)
-            except KillSwitchStartError:
-                pass
+        if not self._ks_handler.is_killswitch_connection_active():
+            self._ks_handler.add()
+            self.__assert_killswitch_connection_exists()
 
-            attempts -= 1
+    def __update_with_server_ip(self, server_ip, **_):
+        self.__assert_killswitch_connection_exists()
 
-        try:
-            self.__ensure_killswitch_connection_exists()
-        except UnexpectedKillSwitchStateError:
-            raise KillSwitchStartError(
-                "Unable to start kill switch with interface {}. Check NetworkManager syslogs".format(
-                    killswitch_config.interface_name
-                )
-            )
+        if self._ks_handler.is_killswitch_connection_active():
+            self._ks_handler.update(server_ip)
 
-    def __attempt_to_delete_killswitch_connection(self):
-        """
-            :raises KillSwitchStartError: If unable to stop kill switch connection
-        """
-        attempts = self.ATTEMPTS
-
-        while self.ATTEMPTS > 0:
-            try:
-                self.__ensure_killswitch_connection_exists()
-            except UnexpectedKillSwitchStateError:
-                break
-
-            try:
-                self._ks_handler.remove(KillSwitchConfig.interface_name)
-            except KillSwitchStopError:
-                pass
-
-            attempts -= 1
-
-        try:
-            self.__ensure_killswitch_connection_exists()
-        except UnexpectedKillSwitchStateError:
-            pass
-        else:
-            raise KillSwitchStopError(
-                "Unable to stop kill switch with interface {}. Check NetworkManager syslogs".format(
+    def __assert_killswitch_connection_exists(self):
+        if not self._ks_handler.is_killswitch_connection_active():
+            raise KillSwitchError(
+                "Kill switch connection {} could not be found".format(
                     KillSwitchConfig.interface_name
                 )
             )
 
-    def __ensure_killswitch_connection_exists(self):
-        if not self._ks_handler.is_killswitch_connection_active(KillSwitchConfig.interface_name):
-            raise UnexpectedKillSwitchStateError(
-                "Kill switch connection {} could not be found".format(
+    def __assert_killswitch_connection_does_not_exists(self):
+        if self._ks_handler.is_killswitch_connection_active():
+            raise KillSwitchError(
+                "Kill switch connection {} was found".format(
                     KillSwitchConfig.interface_name
                 )
             )
