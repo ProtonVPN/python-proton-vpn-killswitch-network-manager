@@ -1,8 +1,7 @@
 import logging
 import operator
 
-from dbus_network_manager.dbus_connection import DbusConnection
-from dbus_network_manager.networkmanager_bus import NetworkManagerBus
+from dbus_network_manager import DbusConnection, NetworkManagerBus
 from dbus_network_manager.exceptions import ProtonDbusException
 
 from proton.vpn.killswitch.exceptions import KillSwitchError
