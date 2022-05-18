@@ -1,9 +1,10 @@
 import logging
 import operator
 
-from proton.vpn.backend.linux.networkmanager.dbus import (DbusConnection,
-                                                          NetworkManagerBus)
-from proton.vpn.backend.linux.networkmanager.dbus.exceptions import ProtonDbusException
+from dbus_network_manager.dbus_connection import DbusConnection
+from dbus_network_manager.networkmanager_bus import NetworkManagerBus
+from dbus_network_manager.exceptions import ProtonDbusException
+
 from proton.vpn.killswitch.exceptions import KillSwitchError
 
 logger = logging.getLogger(__name__)

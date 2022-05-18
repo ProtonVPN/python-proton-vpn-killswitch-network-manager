@@ -1,5 +1,3 @@
-from enum import Enum
-
 KILLSWITCH_CONN_NAME = "pvpn-killswitch"
 KILLSWITCH_INTERFACE_NAME = "pvpnksintrf0"
 
