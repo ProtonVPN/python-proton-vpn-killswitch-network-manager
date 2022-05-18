@@ -11,7 +11,11 @@ setup(
     url="https://github.com/ProtonVPN/pyhon-protonvpn-network-manager",
     packages=find_namespace_packages(include=['proton.vpn.killswitch.backend.linux.networkmanager']),
     include_package_data=True,
-    install_requires=["proton-core"],
+    python_requires=">=3.8",
+    install_requires=["proton-vpn-killswitch", "proton-vpn-network-manager"],
+    extras_require={
+        "development": ["wheel", "pytest"]
+    },
     entry_points={
         "proton_loader_killswitch": [
             "networkmanager = proton.vpn.killswitch.backend.linux.networkmanager:NMKillSwitch",
