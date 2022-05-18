@@ -1,8 +1,7 @@
 import logging
 
-from proton.vpn.killswitch import KillSwitch
-from proton.vpn.killswitch
-from proton.vpn.killswitch import (
+from proton.vpn.killswitch.interface import KillSwitch
+from proton.vpn.killswitch.backend.linux.networkmanager.killswitch_connection import (
     KillSwitchConfig, KillSwitchConnectionHandler)
 from proton.vpn.killswitch.interface.exceptions import KillSwitchException
 
