@@ -4,7 +4,7 @@ import operator
 from dbus_network_manager import DbusConnection, NetworkManagerBus
 from dbus_network_manager.exceptions import ProtonDbusException
 
-from proton.vpn.killswitch.exceptions import KillSwitchError
+from proton.vpn.killswitch.exceptions import KillSwitchException
 
 logger = logging.getLogger(__name__)
 
@@ -121,13 +121,13 @@ class KillSwitchConnectionHandler:
     def add(self):
         conn = self._get_connection()
         if conn:
-            raise KillSwitchError(f"Kill switch connection {self.__killswitch_config.interface_name} already exists.")
+            raise KillSwitchException(f"Kill switch connection {self.__killswitch_config.interface_name} already exists.")
 
         nm_settings = NetworkManagerBus().get_network_manager_settings()
         try:
             nm_settings.add_connection(self.__killswitch_config.generate_connection_config())
         except ProtonDbusException as e:
-            raise KillSwitchError(
+            raise KillSwitchException(
                 f"Unable to start kill switch with interface {self.__killswitch_config.interface_name}. "
                 f"Check NetworkManager syslogs."
             ) from e
@@ -135,12 +135,12 @@ class KillSwitchConnectionHandler:
     def remove(self):
         conn = self._get_connection()
         if not conn:
-            raise KillSwitchError(f"Kill switch connection {KillSwitchConfig.interface_name} could not be found.")
+            raise KillSwitchException(f"Kill switch connection {KillSwitchConfig.interface_name} could not be found.")
 
         try:
             conn.delete_connection()
         except ProtonDbusException as e:
-            raise KillSwitchError(
+            raise KillSwitchException(
                 f"Unable to stop kill switch with interface {self.__killswitch_config.interface_name}."
                 f"Check NetworkManager syslogs."
             ) from e
@@ -148,14 +148,14 @@ class KillSwitchConnectionHandler:
     def update(self, server_ip: str):
         conn = self._get_connection()
         if not conn:
-            raise KillSwitchError(f"Kill switch connection {KillSwitchConfig.interface_name} could not be found.")
+            raise KillSwitchException(f"Kill switch connection {KillSwitchConfig.interface_name} could not be found.")
 
         self.__killswitch_config.update_ipv4_addresses(server_ip)
 
         try:
             conn.update_settings(self.__killswitch_config.generate_connection_config())
         except ProtonDbusException as e:
-            raise KillSwitchError("Unexpected kill switch state.") from e
+            raise KillSwitchException("Unexpected kill switch state.") from e
 
     def _get_connection(self):
         return NetworkManagerBus().get_network_manager().search_for_connection(

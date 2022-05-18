@@ -3,7 +3,7 @@ import logging
 from proton.vpn.killswitch import KillSwitch
 from proton.vpn.killswitch.backend.linux.networkmanager.killswitch_connection import (
     KillSwitchConfig, KillSwitchConnectionHandler)
-from proton.vpn.killswitch.exceptions import KillSwitchError
+from proton.vpn.killswitch.exceptions import KillSwitchException
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class NMKillSwitch(KillSwitch):
 
     def __assert_killswitch_connection_exists(self):
         if not self._ks_handler.is_killswitch_connection_active():
-            raise KillSwitchError(
+            raise KillSwitchException(
                 "Kill switch connection {} could not be found".format(
                     KillSwitchConfig.interface_name
                 )
@@ -36,7 +36,7 @@ class NMKillSwitch(KillSwitch):
 
     def __assert_killswitch_connection_does_not_exists(self):
         if self._ks_handler.is_killswitch_connection_active():
-            raise KillSwitchError(
+            raise KillSwitchException(
                 "Kill switch connection {} was found".format(
                     KillSwitchConfig.interface_name
                 )
