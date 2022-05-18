@@ -4,7 +4,7 @@ import operator
 from dbus_network_manager import DbusConnection, NetworkManagerBus
 from dbus_network_manager.exceptions import ProtonDbusException
 
-from proton.vpn.killswitch.exceptions import KillSwitchException
+from proton.vpn.killswitch.interface.exceptions import KillSwitchException
 
 logger = logging.getLogger(__name__)
 
