@@ -1,7 +1,12 @@
-from proton.vpn.backend.linux.networkmanager.dbus import (DbusConnection,
-                                                          NetworkManagerBus)
-from proton.vpn.backend.linux.networkmanager.dbus.exceptions import ProtonDbusException
-from proton.vpn.killswitch.exceptions import KillSwitchError
+import logging
+import operator
+
+from dbus_network_manager import DbusConnection, NetworkManagerBus
+from dbus_network_manager.exceptions import ProtonDbusException
+
+from proton.vpn.killswitch.interface.exceptions import KillSwitchException
+
+logger = logging.getLogger(__name__)
 
 
 class KillSwitchConfig:
@@ -111,50 +116,51 @@ class KillSwitchConnectionHandler:
     """Kill switch connection management."""
 
     def __init__(self, killswitch_config: KillSwitchConfig = None):
-        if killswitch_config is None:
-            killswitch_config = KillSwitchConfig()
-
-        self.__killswtich_config = killswitch_config
+        self.__killswitch_config = killswitch_config or KillSwitchConfig()
 
     def add(self):
-        nm_settings = NetworkManagerBus().get_network_manager_settings()
+        conn = self._get_connection()
+        if conn:
+            raise KillSwitchException(f"Kill switch connection {self.__killswitch_config.interface_name} already exists.")
 
+        nm_settings = NetworkManagerBus().get_network_manager_settings()
         try:
-            nm_settings.add_connection(self.__killswtich_config.generate_connection_config())
-        except (RuntimeError, ProtonDbusException) as e:
-            raise KillSwitchError(
-                "Unable to start kill switch with interface {}. Check NetworkManager syslogs".format(
-                    self.__killswtich_config.interface_name
-                )
+            nm_settings.add_connection(self.__killswitch_config.generate_connection_config())
+        except ProtonDbusException as e:
+            raise KillSwitchException(
+                f"Unable to start kill switch with interface {self.__killswitch_config.interface_name}. "
+                f"Check NetworkManager syslogs."
             ) from e
 
     def remove(self):
-        conn = self.is_killswitch_connection_active()
+        conn = self._get_connection()
+        if not conn:
+            raise KillSwitchException(f"Kill switch connection {KillSwitchConfig.interface_name} could not be found.")
 
         try:
             conn.delete_connection()
         except ProtonDbusException as e:
-            raise KillSwitchError(
-                "Unable to stop kill switch with interface {}. Check NetworkManager syslogs".format(
-                    self.__killswtich_config.interface_name
-                )
+            raise KillSwitchException(
+                f"Unable to stop kill switch with interface {self.__killswitch_config.interface_name}."
+                f"Check NetworkManager syslogs."
             ) from e
 
     def update(self, server_ip: str):
-        conn = self.is_killswitch_connection_active()
+        conn = self._get_connection()
+        if not conn:
+            raise KillSwitchException(f"Kill switch connection {KillSwitchConfig.interface_name} could not be found.")
 
-        self.__killswtich_config.update_ipv4_addresses(server_ip)
+        self.__killswitch_config.update_ipv4_addresses(server_ip)
 
         try:
-            conn.update_settings(self.__killswtich_config.generate_connection_config())
+            conn.update_settings(self.__killswitch_config.generate_connection_config())
         except ProtonDbusException as e:
-            raise KillSwitchError(
-                "Unexpected kill switch state '{}'".format(
-                    self.__killswtich_config.interface_name
-                )
-            ) from e
+            raise KillSwitchException("Unexpected kill switch state.") from e
 
-    def is_killswitch_connection_active(self) -> "ConnectionSettingsAdapter":
+    def _get_connection(self):
         return NetworkManagerBus().get_network_manager().search_for_connection(
-            interface_name=self.__killswtich_config.interface_name
+            interface_name=self.__killswitch_config.interface_name
         )
+
+    def is_killswitch_connection_active(self):
+        return operator.truth(self._get_connection())  # FIXME: self._get_connection() should return None rather than an empty string when no connection was found
