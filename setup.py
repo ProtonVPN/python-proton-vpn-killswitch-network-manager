@@ -14,7 +14,7 @@ setup(
     python_requires=">=3.8",
     install_requires=["proton-vpn-killswitch", "proton-vpn-network-manager", "dbus-python"],
     extras_require={
-        "test": ["wheel", "pytest"]
+        "development": ["wheel", "pytest"]
     },
     entry_points={
         "proton_loader_killswitch": [
