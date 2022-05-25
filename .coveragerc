@@ -1,0 +1,3 @@
+[run]
+omit = 
+    proton/vpn/killswitch/backend/linux/networkmanager/__init__.py
