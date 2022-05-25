@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 class KillSwitchConfig:
     """This kill switch connection will block all connections to the outside
     based on a provided server IP list, passed to IPv4_addresses."""
-    human_readable_id = "pvpn-routed-killswitch"
-    interface_name = "pvpnroutintrf0"
+    human_readable_id = "pvpn-killswitch"
+    interface_name = "pvpnksllswitchintrf0"
 
     ipv4_address_data = [{"address": "100.85.0.1", "prefix": 24}]
     ipv4_addresses = [("100.85.0.1", 24, "100.85.0.1")]
