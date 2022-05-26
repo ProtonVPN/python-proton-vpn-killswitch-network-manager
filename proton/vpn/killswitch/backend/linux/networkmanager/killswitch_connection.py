@@ -1,19 +1,24 @@
+import ipaddress
 import logging
 import operator
 
 from dbus_network_manager import DbusConnection, NetworkManagerBus
 from dbus_network_manager.exceptions import ProtonDbusException
-
 from proton.vpn.killswitch.interface.exceptions import KillSwitchException
 
 logger = logging.getLogger(__name__)
 
 
 class KillSwitchConfig:
-    """This kill switch connection will block all connections to the outside
-    based on a provided server IP list, passed to IPv4_addresses."""
+    """
+    Further abstracts the creaton of a kill switch dummy connection for network manager.
+
+    The dbus kill switch connection is created internally. Class properties expose what can be
+    changed although, for the most part nothing should be changed, with the exception of
+    when creating a route for a specific server ip. See  
+    """
     human_readable_id = "pvpn-killswitch"
-    interface_name = "pvpnksllswitchintrf0"
+    interface_name = "pvpnksintrf0"
 
     ipv4_address_data = [{"address": "100.85.0.1", "prefix": 24}]
     ipv4_addresses = [("100.85.0.1", 24, "100.85.0.1")]
@@ -36,27 +41,46 @@ class KillSwitchConfig:
     def __init__(self, server_ip=None):
         self.__ks_conn = DbusConnection()
         if server_ip:
-            self.ipv4_addresses = self.__format_subnet_list(
-                self.__generate_subnet_list(server_ip)
-            )
+            self.update_ipv4_addresses(server_ip)
 
     def update_ipv4_addresses(self, server_ip: str):
+        """
+            :param server_ip: ipv4 address
+            :type server_ip: str
+
+        Internally updates the ipv4 addresses so that all routes are
+        blocked with the exception of the `server_ip` that was provided.
+        This usually helps if the user is running a permanent kill switch
+        (which block all traffic) by creating a small gap so that only
+        the `server_ip` can reach outside while rest of the traffic is blocked.
+        """
+        try:
+            ipaddress.ip_network(server_ip)
+        except ValueError as e:
+            raise ValueError(f"{e}") from e
+
         self.ipv4_addresses = self.__format_subnet_list(
             self.__generate_subnet_list(server_ip)
         )
 
     def generate_connection_config(self) -> "dbus.Dictionary":
-        """Non modifieable dbus connection object.
+        """
+            :return: connection configurations in dict format
+            :rtype: dbus.Dictionary
 
-        Modifying the object that is returned here will not take
-        effect.
-
-        For changes to take effect, class proprties have to be changed.
+        Properly updates the configuration of the kill switch connection
+        and generates it in a proper format so that it can be added easily.
         """
         self.__update_connection_settings()
         return self.__ks_conn.generate_configuration()
 
     def __update_connection_settings(self):
+        """
+        This method configures the kill switch internally at once. It is private
+        because this is called internally when calling `generate_connection_config()`.
+
+        Should not be called by itself.
+        """
         self.__ks_conn.settings.human_readable_id = self.human_readable_id
         self.__ks_conn.settings.interface_name = self.interface_name
 
@@ -104,7 +128,6 @@ class KillSwitchConfig:
             :return: list with ip that should be included
             :rtype: list(str)
         """
-        import ipaddress
         return list(
             ipaddress.ip_network(
                 '0.0.0.0/0'
@@ -116,6 +139,12 @@ class KillSwitchConnectionHandler:
     """Kill switch connection management."""
 
     def __init__(self, killswitch_config: KillSwitchConfig = None):
+        if killswitch_config is not None and not isinstance(killswitch_config, KillSwitchConfig):
+            raise TypeError(
+                "Wrong type for 'killswitch_config' argument. "
+                f"Expected {type(None)} or {KillSwitchConfig} "
+                f"but got {type(killswitch_config)}"
+            )
         self.__killswitch_config = killswitch_config or KillSwitchConfig()
 
     def add(self):
@@ -129,7 +158,7 @@ class KillSwitchConnectionHandler:
         except ProtonDbusException as e:
             raise KillSwitchException(
                 f"Unable to start kill switch with interface {self.__killswitch_config.interface_name}. "
-                f"Check NetworkManager syslogs."
+                f"{e}"
             ) from e
 
     def remove(self):
@@ -141,8 +170,8 @@ class KillSwitchConnectionHandler:
             conn.delete_connection()
         except ProtonDbusException as e:
             raise KillSwitchException(
-                f"Unable to stop kill switch with interface {self.__killswitch_config.interface_name}."
-                f"Check NetworkManager syslogs."
+                f"Unable to stop kill switch with interface {self.__killswitch_config.interface_name}. "
+                f"{e}"
             ) from e
 
     def update(self, server_ip: str):
@@ -155,7 +184,10 @@ class KillSwitchConnectionHandler:
         try:
             conn.update_settings(self.__killswitch_config.generate_connection_config())
         except ProtonDbusException as e:
-            raise KillSwitchException("Unexpected kill switch state.") from e
+            raise KillSwitchException(
+                f"An error occured while trying to update connection {self.__killswitch_config.interface_name}. "
+                f"{e}"
+            ) from e
 
     def _get_connection(self):
         return NetworkManagerBus().get_network_manager().search_for_connection(
@@ -163,4 +195,4 @@ class KillSwitchConnectionHandler:
         )
 
     def is_killswitch_connection_active(self):
-        return operator.truth(self._get_connection())  # FIXME: self._get_connection() should return None rather than an empty string when no connection was found
+        return operator.truth(self._get_connection())
