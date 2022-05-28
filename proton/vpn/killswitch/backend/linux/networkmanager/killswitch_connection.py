@@ -148,8 +148,7 @@ class KillSwitchConnectionHandler:
         self.__killswitch_config = killswitch_config or KillSwitchConfig()
 
     def add(self):
-        conn = self._get_connection()
-        if conn:
+        if self.is_killswitch_connection_active():
             raise KillSwitchException(f"Kill switch connection {self.__killswitch_config.interface_name} already exists.")
 
         nm_settings = NetworkManagerBus().get_network_manager_settings()
@@ -162,12 +161,11 @@ class KillSwitchConnectionHandler:
             ) from e
 
     def remove(self):
-        conn = self._get_connection()
-        if not conn:
+        if not self.is_killswitch_connection_active():
             raise KillSwitchException(f"Kill switch connection {KillSwitchConfig.interface_name} could not be found.")
 
         try:
-            conn.delete_connection()
+            self._get_connection().delete_connection()
         except ProtonDbusException as e:
             raise KillSwitchException(
                 f"Unable to stop kill switch with interface {self.__killswitch_config.interface_name}. "
@@ -175,24 +173,23 @@ class KillSwitchConnectionHandler:
             ) from e
 
     def update(self, server_ip: str):
-        conn = self._get_connection()
-        if not conn:
+        if not self.is_killswitch_connection_active():
             raise KillSwitchException(f"Kill switch connection {KillSwitchConfig.interface_name} could not be found.")
 
         self.__killswitch_config.update_ipv4_addresses(server_ip)
 
         try:
-            conn.update_settings(self.__killswitch_config.generate_connection_config())
+            self._get_connection().update_settings(self.__killswitch_config.generate_connection_config())
         except ProtonDbusException as e:
             raise KillSwitchException(
                 f"An error occured while trying to update connection {self.__killswitch_config.interface_name}. "
                 f"{e}"
             ) from e
 
+    def is_killswitch_connection_active(self):
+        return operator.truth(self._get_connection())
+
     def _get_connection(self):
         return NetworkManagerBus().get_network_manager().search_for_connection(
             interface_name=self.__killswitch_config.interface_name
         )
-
-    def is_killswitch_connection_active(self):
-        return operator.truth(self._get_connection())
