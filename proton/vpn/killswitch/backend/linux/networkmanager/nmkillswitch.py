@@ -17,14 +17,15 @@ class NMKillSwitch(KillSwitch):
     def _enable(self, ipv4_serverip=None, **_):
         if not self._ks_handler.is_killswitch_connection_active():
             self._ks_handler.add()
+            if ipv4_serverip:
+                self._ks_handler.update(ipv4_serverip)
 
         self.__assert_killswitch_connection_exists()
 
     def _disable(self, **_):
         if self._ks_handler.is_killswitch_connection_active():
             self._ks_handler.remove()
-
-        self.__assert_killswitch_connection_does_not_exists()
+            self.__assert_killswitch_connection_does_not_exists()
 
     def _update(self, ipv4_server=None, **_):
         self.__assert_killswitch_connection_exists()

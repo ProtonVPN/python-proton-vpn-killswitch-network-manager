@@ -26,15 +26,13 @@ def test_enable():
 
 def test_disable():
     ks_handler = Mock()
-    ks_handler.is_killswitch_connection_active.return_value = False
-    ks = NMKillSwitch(KillSwitchStateEnum.OFF, ks_handler)
-    ks_handler.is_killswitch_connection_active.return_value = True
+    ks_handler.is_killswitch_connection_active.side_effect = [True, False]
+    ks = NMKillSwitch(KillSwitchStateEnum.ON_NON_PERMANENT, ks_handler)
     # Given that _enable adds a kill switch connection, there should be no connection
     # before the add() method. After executing the add() method, the kill switch
     # connection should be active.
-    ks_handler.is_killswitch_connection_active.side_effect = [False, True]
-    ks._enable()
-    assert ks_handler.add.called
+    ks._disable()
+    assert ks_handler.remove.called
 
 
 def test_update():
