@@ -9,6 +9,16 @@ logger = logging.getLogger(__name__)
 
 
 class NMKillSwitch(KillSwitch):
+    """
+    `NMKillSwitch` is an implementation of `KillSwitch`.
+
+    It uses Network Manager to create dummy connections that route
+    traffic to in-existent IPs.
+
+    The constructor accepts a `ks_handler` mostly for testing purposes,
+    but can also be overwritten so that another backend handler can be used
+    instead.
+    """
 
     def __init__(self, state, ks_handler=None):
         self._ks_handler = ks_handler or KillSwitchConnectionHandler()
