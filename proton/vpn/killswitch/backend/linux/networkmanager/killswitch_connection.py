@@ -11,11 +11,11 @@ logger = logging.getLogger(__name__)
 
 class KillSwitchConfig:
     """
-    Further abstracts the creaton of a kill switch dummy connection for network manager.
+    Further abstracts the creation of a kill switch dummy connection for network manager.
 
     The dbus kill switch connection is created internally. Class properties expose what can be
-    changed although, for the most part nothing should be changed, with the exception of
-    when creating a route for a specific server ip. See  
+    changed although, for the most part nothing should be changed, except
+    when creating a route for a specific server ip.
     """
     human_readable_id = "pvpn-killswitch"
     interface_name = "pvpnksintrf0"
@@ -63,7 +63,7 @@ class KillSwitchConfig:
             self.__generate_subnet_list(server_ip)
         )
 
-    def generate_connection_config(self) -> "dbus.Dictionary":
+    def generate_connection_config(self) -> "dbus.Dictionary":  # noqa: F821
         """
             :return: connection configurations in dict format
             :rtype: dbus.Dictionary
@@ -149,32 +149,42 @@ class KillSwitchConnectionHandler:
 
     def add(self):
         if self.is_killswitch_connection_active():
-            raise KillSwitchException(f"Kill switch connection {self.__killswitch_config.interface_name} already exists.")
+            raise KillSwitchException(
+                f"Kill switch connection "
+                f"{self.__killswitch_config.interface_name} already exists."
+            )
 
         nm_settings = NetworkManagerBus().get_network_manager_settings()
         try:
             nm_settings.add_connection(self.__killswitch_config.generate_connection_config())
         except ProtonDbusException as e:
             raise KillSwitchException(
-                f"Unable to start kill switch with interface {self.__killswitch_config.interface_name}. "
+                f"Unable to start kill switch with interface "
+                f"{self.__killswitch_config.interface_name}. "
                 f"{e}"
             ) from e
 
     def remove(self):
         if not self.is_killswitch_connection_active():
-            raise KillSwitchException(f"Kill switch connection {KillSwitchConfig.interface_name} could not be found.")
+            raise KillSwitchException(
+                f"Kill switch connection {KillSwitchConfig.interface_name} "
+                f"could not be found."
+            )
 
         try:
             self._get_connection().delete_connection()
         except ProtonDbusException as e:
             raise KillSwitchException(
-                f"Unable to stop kill switch with interface {self.__killswitch_config.interface_name}. "
-                f"{e}"
+                f"Unable to stop kill switch with interface "
+                f"{self.__killswitch_config.interface_name}."
             ) from e
 
     def update(self, server_ip: str):
         if not self.is_killswitch_connection_active():
-            raise KillSwitchException(f"Kill switch connection {KillSwitchConfig.interface_name} could not be found.")
+            raise KillSwitchException(
+                f"Kill switch connection {KillSwitchConfig.interface_name} "
+                f"could not be found."
+            )
 
         self.__killswitch_config.update_ipv4_addresses(server_ip)
 
@@ -182,8 +192,8 @@ class KillSwitchConnectionHandler:
             self._get_connection().update_settings(self.__killswitch_config.generate_connection_config())
         except ProtonDbusException as e:
             raise KillSwitchException(
-                f"An error occured while trying to update connection {self.__killswitch_config.interface_name}. "
-                f"{e}"
+                f"An error occured while trying to update connection "
+                f"{self.__killswitch_config.interface_name}."
             ) from e
 
     def is_killswitch_connection_active(self):
