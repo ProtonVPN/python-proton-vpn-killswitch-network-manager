@@ -7,10 +7,6 @@ from proton.vpn.killswitch.backend.linux.networkmanager.killswitch_connection im
     KillSwitchConfig, KillSwitchConnectionHandler)
 from proton.vpn.killswitch.interface.exceptions import KillSwitchException
 
-# Initialize network-manager, debian and fedora
-subprocess.Popen("/usr/sbin/NetworkManager", stdin=subprocess.PIPE, shell=True)
-subprocess.Popen("/sbin/NetworkManager", stdin=subprocess.PIPE, shell=True)
-
 
 TEST_HUMAN_READEABLE_ID = "test-pvpn-killswitch"
 TEST_INTERFACE_NAME = "testpvpn0"
