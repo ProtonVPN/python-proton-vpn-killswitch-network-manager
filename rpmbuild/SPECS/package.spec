@@ -1,5 +1,5 @@
 %define unmangled_name proton-vpn-killswitch-network-manager
-%define version 0.0.1
+%define version 0.1.0
 %define release 1
 
 Prefix: %{_prefix}
@@ -18,11 +18,11 @@ BuildArch: noarch
 BuildRoot: %{_tmppath}/%{unmangled_name}-%{version}-%{release}-buildroot
 
 BuildRequires: python3-proton-vpn-killswitch
-BuildRequires: python3-dbus-network-manager
+BuildRequires: python3-proton-vpn-logger
 BuildRequires: python3-setuptools
 
 Requires: python3-proton-vpn-killswitch
-Requires: python3-dbus-network-manager
+Requires: python3-proton-vpn-logger
 
 %{?python_disable_dependency_generator}
 
@@ -46,5 +46,8 @@ python3 setup.py install --single-version-externally-managed -O1 --root=$RPM_BUI
 %defattr(-,root,root)
 
 %changelog
+* Thu Mar 23 2023 Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch> 0.1.0
+- Implement IPv6 leak protection
+
 * Wed Jun 1 2022 Proton Technologies AG <opensource@proton.me> 0.0.1
 - First RPM release
