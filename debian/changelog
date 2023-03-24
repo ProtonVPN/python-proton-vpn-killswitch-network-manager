@@ -1,5 +1,11 @@
-protonvpn-killswitch-network-manager (0.0.1~next-mickael) UNRELEASED; urgency=medium
+proton-vpn-killswitch-network-manager (0.1.0) UNRELEASED; urgency=medium
+
+  * Implement IPv6 leak protection
+
+ -- Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch>  Thu, 23 Mar 2023 10:00:00 +0100
+
+proton-vpn-killswitch-network-manager (0.0.1) UNRELEASED; urgency=medium
 
   * First release
 
- -- Mickaël Hoerdt <opensource@proton.me>  Wed, 18 May 2022 10:01:37 +0100
+ -- Proton Technologies AG <opensource@proton.me>  Wed, 18 May 2022 10:01:37 +0100

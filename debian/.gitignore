@@ -1,9 +1,9 @@
 .debhelper
 debhelper-build-stamp
 files
-python3-protonvpn-killswitch-network-manager.debhelper.log
-python3-protonvpn-killswitch-network-manager.postinst.debhelper
-python3-protonvpn-killswitch-network-manager.postrm.debhelper
-python3-protonvpn-killswitch-network-manager.prerm.debhelper
-python3-protonvpn-killswitch-network-manager.substvars
-python3-protonvpn-killswitch-network-manager
+python3-proton-vpn-killswitch-network-manager.debhelper.log
+python3-proton-vpn-killswitch-network-manager.postinst.debhelper
+python3-proton-vpn-killswitch-network-manager.postrm.debhelper
+python3-proton-vpn-killswitch-network-manager.prerm.debhelper
+python3-proton-vpn-killswitch-network-manager.substvars
+python3-proton-vpn-killswitch-network-manager
