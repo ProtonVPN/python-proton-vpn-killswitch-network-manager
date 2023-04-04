@@ -1,3 +1,9 @@
+proton-vpn-killswitch-network-manager (0.1.1) UNRELEASED; urgency=medium
+
+  * Rely on NMClient for connection handling
+
+ -- Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch>  Tue, 04 Apr 2023 10:00:00 +0100
+
 proton-vpn-killswitch-network-manager (0.1.0) UNRELEASED; urgency=medium
 
   * Implement IPv6 leak protection

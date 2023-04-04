@@ -1,128 +1,153 @@
 """
-This modules contains the classes that communicate with NetworkManager.
+This module contains all configurations needed to create
+connection Kill Switches for NM.Client.
 """
-import ipaddress
-import subprocess
-from proton.vpn import logging
+import uuid
+from dataclasses import dataclass, field
+from proton.vpn.killswitch.backend.linux.networkmanager.nmclient import NM, GLib
 
 
-logger = logging.getLogger(__name__)
+@dataclass
+class KillSwitchGeneralConfig:  # pylint: disable=missing-class-docstring
+    human_readable_id: str
+    interface_name: str
 
 
-class KillSwitchConfig:  # pylint: disable=too-few-public-methods
+@dataclass
+class KillSwitchIPConfig:  # pylint: disable=missing-class-docstring
+    addresses: list
+    dns: list
+    dns_priority: str
+    ignore_auto_dns: bool
+    route_metric: str
+    gateway: str = None
+    routes: list = field(default_factory=list)
+
+
+class KillSwitchConnection:  # pylint: disable=too-few-public-methods
+    """Connection that is used to configure different types of Kill Switch
+    connection. Are easily configured with the help of `KillSwitchGeneralConfig`
+    and `KillSwitchIPConfig`.
     """
-    Further abstracts the creation of a kill switch dummy connection for network manager.
+    def __init__(
+        self,
+        general_settings: KillSwitchGeneralConfig,
+        ipv6_settings: KillSwitchIPConfig,
+        ipv4_settings: KillSwitchIPConfig = None
+    ):
+        self._connection_profile = None
+        self._general_settings = general_settings
+        self._ipv6_settings = ipv6_settings
+        self._ipv4_settings = ipv4_settings
 
-    The dbus kill switch connection is created internally. Class properties expose what can be
-    changed although, for the most part nothing should be changed, except
-    when creating a route for a specific server ip.
-    """
-    human_readable_id = "pvpn-killswitch"
-    interface_name = "pvpnksintrf0"
-    human_readable_id_ipv6 = "pvpn-killswitch-ipv6"
-    interface_name_ipv6 = "ipv6leakintrf0"
+    @property
+    def connection(self) -> NM.Connection:
+        """Lazy return connection object"""
+        if self._connection_profile is None:
+            self._create_connection_profile()
 
-    ipv4_addresses = ["100.85.0.1"]
-    ipv4_prefix = 24
-    ipv4_method = "manual"
-    ipv4_dns = ["0.0.0.0"]
-    ipv4_dns_priority = -1400
-    ipv4_gateway = "100.85.0.1"
-    ipv4_ignore_auto_dns = True
-    ipv4_route_metric = 97
+        return self._connection_profile
 
-    ipv6_addresses = ["fdeb:446c:912d:08da::"]
-    ipv6_prefix = 64
-    ipv6_method = "manual"
-    ipv6_dns = ["::1"]
-    ipv6_dns_priority = -1400
-    ipv6_gateway = "fdeb:446c:912d:08da::1"
-    ipv6_ignore_auto_dns = True
-    ipv6_route_metric = 97
+    def _create_connection_profile(self):
+        self._connection_profile = NM.SimpleConnection.new()
 
-    def create_hole_for_ipv4(self, server_ip: str):
-        """
-            :param server_ip: ipv4 address
-            :type server_ip: str
-
-        Internally updates the ipv4 addresses so that all routes are
-        blocked with the exception of the `server_ip` that was provided.
-        This usually helps if the user is running a permanent kill switch
-        (which block all traffic) by creating a small gap so that only
-        the `server_ip` can reach outside while rest of the traffic is blocked.
-        """
-        self.ipv4_addresses = self._generate_subnet_list(server_ip)
-
-    def _generate_subnet_list(self, server_ip: str) -> list:
-        """
-            :param server_ip: vpn server ip
-            :type server_ip: str
-            :return: list with ip that should be included
-            :rtype: list(str)
-        """
-        return list(
-            ipaddress.ip_network(
-                '0.0.0.0/0'
-            ).address_exclude(ipaddress.ip_network(server_ip))
+        s_con = NM.SettingConnection.new()
+        s_con.set_property(NM.SETTING_CONNECTION_ID, self._general_settings.human_readable_id)
+        s_con.set_property(
+            NM.SETTING_CONNECTION_INTERFACE_NAME,
+            self._general_settings.interface_name
         )
+        s_con.set_property(NM.SETTING_CONNECTION_UUID, str(uuid.uuid4()))
+        s_con.set_property(NM.SETTING_CONNECTION_TYPE, "dummy")
 
+        s_dummy = NM.SettingDummy.new()
 
-class KillSwitchConnectionHandler:
-    """Kill switch connection management."""
+        s_ipv4 = self._generate_ipv4_settings()
+        s_ipv6 = self._generate_ipv6_settings()
 
-    def __init__(self, killswitch_config: KillSwitchConfig = None):
-        self._killswitch_config = killswitch_config or KillSwitchConfig()
+        self._connection_profile.add_setting(s_con)
+        self._connection_profile.add_setting(s_ipv4)
+        self._connection_profile.add_setting(s_ipv6)
+        self._connection_profile.add_setting(s_dummy)
 
-    @property
-    def is_killswitch_connection_active(self) -> bool:
-        """Returns if general kill switch is active or not."""
-        return False
+    def _generate_ipv4_settings(self):
+        """
+        For documentaion see:
+        https://lazka.github.io/pgi-docs/index.html#NM-1.0/classes/SettingIPConfig.html#NM.SettingIPConfig
+        https://lazka.github.io/pgi-docs/NM-1.0/classes/IPAddress.html#NM.IPAddress
+        https://lazka.github.io/pgi-docs/NM-1.0/classes/IPRoute.html#NM.IPRoute.new
+        """
+        s_ip4 = NM.SettingIP4Config.new()
 
-    @property
-    def is_ipv6_leak_protection_connection_active(self) -> bool:
-        """Returns if IPv6 kill switch is active or not."""
-        subprocess_command = [
-            "nmcli", "c", "s", self._killswitch_config.human_readable_id_ipv6
-        ]
-        completed_process = subprocess.run(subprocess_command, capture_output=True, check=False)
-        return completed_process.returncode == 0
+        if self._ipv4_settings is None:
+            s_ip4.set_property(NM.SETTING_IP_CONFIG_METHOD, "disabled")
+            return s_ip4
 
-    def add(self, server_ip: str):
-        """Adds general kill switch to NetworkManager"""
-        raise NotImplementedError
+        s_ip4.set_property(NM.SETTING_IP_CONFIG_METHOD, "manual")
 
-    def remove(self):
-        """Removes general kill switch from NetworkManager."""
-        raise NotImplementedError
+        # add addresses
+        for address in self._ipv4_settings.addresses:
+            ip, prefix = address.split("/")  # pylint: disable=invalid-name
+            s_ip4.add_address(
+                NM.IPAddress.new(GLib.SYSDEF_AF_INET, ip, int(prefix))
+            )
 
-    def update(self, server_ip: str):
-        """Update the general kill switch."""
-        raise NotImplementedError
+        # add DNS
+        for dns in self._ipv4_settings.dns:
+            s_ip4.add_dns(dns)
 
-    def add_ipv6_leak_protection(self):
-        """Adds IPv6 kill switch to NetworkManager."""
-        ipv6_config = f"{self._killswitch_config.ipv6_addresses[0]}/"\
-            f"{str(self._killswitch_config.ipv6_prefix)}"
-        subprocess_command = [
-            "nmcli", "c", "a", "type", "dummy",
-            "ifname", self._killswitch_config.interface_name_ipv6,
-            "con-name", self._killswitch_config.human_readable_id_ipv6,
-            "ipv6.method", "manual",
-            "ipv6.addresses", ipv6_config,
-            "ipv6.gateway", self._killswitch_config.ipv6_gateway,
-            "ipv6.route-metric", str(self._killswitch_config.ipv6_route_metric),
-            "ipv6.dns-priority", str(self._killswitch_config.ipv6_dns_priority),
-            "ipv6.ignore-auto-dns", "yes",
-            "ipv6.dns", self._killswitch_config.ipv6_dns[0]
-        ]
-        proccess = subprocess.run(subprocess_command, capture_output=True, check=False)
-        logger.info(proccess.stdout.decode('utf-8'), category="killswitch:ipv6", event="add")
+        if self._ipv4_settings.routes:
+            for route in self._ipv4_settings.routes:
+                ip, prefix = route.split("/")  # pylint: disable=invalid-name
+                s_ip4.add_route(
+                    NM.IPRoute.new(
+                        family=GLib.SYSDEF_AF_INET, dest=ip, prefix=int(prefix),
+                        next_hop=None, metric=-1
+                    )
+                )
 
-    def remove_ipv6_leak_protection(self):
-        """Removes IPv6 kill switch from NetworkManager."""
-        subprocess_command = [
-            "nmcli", "c", "delete",
-            self._killswitch_config.human_readable_id_ipv6
-        ]
-        proccess = subprocess.run(subprocess_command, capture_output=True, check=False)
-        logger.info(proccess.stdout.decode('utf-8'), category="killswitch:ipv6", event="remove")
+        # rest of the configs that don't have a method
+        s_ip4.props.dns_priority = self._ipv4_settings.dns_priority
+        s_ip4.props.route_metric = self._ipv4_settings.route_metric
+        s_ip4.props.ignore_auto_dns = self._ipv4_settings.ignore_auto_dns
+
+        if self._ipv4_settings.gateway:
+            s_ip4.props.gateway = self._ipv4_settings.gateway
+
+        return s_ip4
+
+    def _generate_ipv6_settings(self):
+        """
+        For documentaion see:
+        https://lazka.github.io/pgi-docs/index.html#NM-1.0/classes/SettingIPConfig.html#NM.SettingIPConfig
+        https://lazka.github.io/pgi-docs/NM-1.0/classes/IPAddress.html#NM.IPAddress
+        https://lazka.github.io/pgi-docs/NM-1.0/classes/IPRoute.html#NM.IPRoute.new
+        """
+        s_ip6 = NM.SettingIP6Config.new()
+
+        if self._ipv6_settings is None:
+            s_ip6.set_property(NM.SETTING_IP_CONFIG_METHOD, "disabled")
+            return s_ip6
+
+        s_ip6.set_property(NM.SETTING_IP_CONFIG_METHOD, "manual")
+
+        # add addresses
+        for address in self._ipv6_settings.addresses:
+            ip, prefix = address.split("/")  # pylint: disable=invalid-name
+            s_ip6.add_address(
+                NM.IPAddress.new(GLib.SYSDEF_AF_INET6, ip, int(prefix))
+            )
+
+        # add DNS
+        for dns in self._ipv6_settings.dns:
+            s_ip6.add_dns(dns)
+
+        # rest of the configs that don't have a method
+        s_ip6.props.dns_priority = self._ipv6_settings.dns_priority
+        s_ip6.props.route_metric = self._ipv6_settings.route_metric
+        s_ip6.props.ignore_auto_dns = self._ipv6_settings.ignore_auto_dns
+
+        if self._ipv6_settings.gateway:
+            s_ip6.props.gateway = self._ipv6_settings.gateway
+
+        return s_ip6

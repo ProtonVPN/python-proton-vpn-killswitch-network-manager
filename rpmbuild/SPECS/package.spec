@@ -1,5 +1,5 @@
 %define unmangled_name proton-vpn-killswitch-network-manager
-%define version 0.1.0
+%define version 0.1.1
 %define release 1
 
 Prefix: %{_prefix}
@@ -20,9 +20,13 @@ BuildRoot: %{_tmppath}/%{unmangled_name}-%{version}-%{release}-buildroot
 BuildRequires: python3-proton-vpn-killswitch
 BuildRequires: python3-proton-vpn-logger
 BuildRequires: python3-setuptools
+BuildRequires: python3-gobject
+BuildRequires: NetworkManager
 
 Requires: python3-proton-vpn-killswitch
 Requires: python3-proton-vpn-logger
+Requires: python3-gobject
+Requires: NetworkManager
 
 %{?python_disable_dependency_generator}
 
@@ -46,6 +50,9 @@ python3 setup.py install --single-version-externally-managed -O1 --root=$RPM_BUI
 %defattr(-,root,root)
 
 %changelog
+* Tue Apr 04 2023 Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch> 0.1.1
+- Rely on NMClient for connection handling
+
 * Thu Mar 23 2023 Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch> 0.1.0
 - Implement IPv6 leak protection
 

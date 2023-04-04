@@ -1,5 +1,8 @@
-import pytest
 from unittest.mock import Mock, PropertyMock, patch
+from concurrent.futures import Future
+import pytest
+
+from proton.vpn.killswitch.backend.linux.networkmanager.nmclient import GLib
 from proton.vpn.killswitch.backend.linux.networkmanager import NMKillSwitch
 from proton.vpn.killswitch.interface.exceptions import KillSwitchException
 
@@ -57,44 +60,59 @@ def test_disable_killswitch_raises_exception_when_killswitch_is_active_after_bei
 
 
 def test_sucessfully_enable_ipv6_leak_protection():
+    future_mock = Future()
+    future_mock.set_result(None)
     ks_handler_mock = Mock()
-    is_ipv6_leak_protection_connection_active_mock = PropertyMock(side_effect=[False, True])
+    ks_handler_mock.add_ipv6_leak_protection.return_value = future_mock
+    is_ipv6_leak_protection_connection_active_mock = PropertyMock(side_effect=[False])
     type(ks_handler_mock).is_ipv6_leak_protection_connection_active = is_ipv6_leak_protection_connection_active_mock
 
     nm_killswitch = NMKillSwitch(ks_handler_mock)
-    nm_killswitch.enable_ipv6_leak_protection()
+    future = nm_killswitch.enable_ipv6_leak_protection()
+    future.result()
 
     ks_handler_mock.add_ipv6_leak_protection.assert_called_once()
 
 
 def test_enable_ipv6_leak_protection_raises_exception_when_ipv6_killswitch_is_not_active_after_being_enabled():
+    future_mock = Future()
+    future_mock.set_exception(GLib.GError)
     ks_handler_mock = Mock()
-    is_killswitch_connection_active_mock = PropertyMock(side_effect=[False, False])
+    ks_handler_mock.add_ipv6_leak_protection.return_value = future_mock
+    is_killswitch_connection_active_mock = PropertyMock(side_effect=[False])
     type(ks_handler_mock).is_ipv6_leak_protection_connection_active = is_killswitch_connection_active_mock
 
     nm_killswitch = NMKillSwitch(ks_handler_mock)
+    future = nm_killswitch.enable_ipv6_leak_protection()
 
     with pytest.raises(KillSwitchException):
-        nm_killswitch.enable_ipv6_leak_protection()
-
+        future.result()
 
 def test_sucessfully_disable_ipv6_leak_protection():
+    future_mock = Future()
+    future_mock.set_result(None)
     ks_handler_mock = Mock()
-    is_ipv6_leak_protection_connection_active_mock = PropertyMock(side_effect=[True, False])
+    ks_handler_mock.remove_ipv6_leak_protection.return_value = future_mock
+    is_ipv6_leak_protection_connection_active_mock = PropertyMock(side_effect=[True])
     type(ks_handler_mock).is_ipv6_leak_protection_connection_active = is_ipv6_leak_protection_connection_active_mock
 
     nm_killswitch = NMKillSwitch(ks_handler_mock)
-    nm_killswitch.disable_ipv6_leak_protection()
+    future = nm_killswitch.disable_ipv6_leak_protection()
+    future.result()
 
     ks_handler_mock.remove_ipv6_leak_protection.assert_called_once()
 
 
 def test_disable_ipv6_leak_protection_raises_exception_when_ipv6_killswitch_is_active_after_being_disabled():
+    future_mock = Future()
+    future_mock.set_exception(GLib.GError)
     ks_handler_mock = Mock()
-    is_killswitch_connection_active_mock = PropertyMock(side_effect=[True, True])
+    ks_handler_mock.remove_ipv6_leak_protection.return_value = future_mock
+    is_killswitch_connection_active_mock = PropertyMock(side_effect=[True])
     type(ks_handler_mock).is_ipv6_leak_protection_connection_active = is_killswitch_connection_active_mock
 
     nm_killswitch = NMKillSwitch(ks_handler_mock)
+    future = nm_killswitch.disable_ipv6_leak_protection()
 
     with pytest.raises(KillSwitchException):
-        nm_killswitch.disable_ipv6_leak_protection()
+        future.result()
