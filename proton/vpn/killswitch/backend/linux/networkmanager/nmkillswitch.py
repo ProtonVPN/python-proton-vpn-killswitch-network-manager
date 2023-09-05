@@ -22,16 +22,14 @@ along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 import sys
 from concurrent.futures import Future
 
-import gi
-gi.require_version("NM", "1.0")  # noqa: required before importing NM module
-# pylint: disable=wrong-import-position
-from gi.repository import GLib # noqa
+from gi.repository import GLib
 
-from proton.vpn.killswitch.interface import KillSwitch # noqa
-from proton.vpn.killswitch.interface.exceptions import KillSwitchException # noqa
+from proton.vpn.killswitch.interface import KillSwitch
+from proton.vpn.killswitch.interface.exceptions import KillSwitchException
 from proton.vpn.killswitch.backend.linux.networkmanager.killswitch_connection_handler\
-    import KillSwitchConnectionHandler # noqa
-from proton.vpn import logging # noqa
+    import KillSwitchConnectionHandler
+from proton.vpn import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -54,22 +52,118 @@ class NMKillSwitch(KillSwitch):
         self._ks_handler = ks_handler or KillSwitchConnectionHandler()
         super().__init__()
 
-    def enable(self, vpn_server):
+    def enable(self, vpn_server: "VPNServer" = None):  # noqa
         """Enables general kill switch."""
-        if not self._ks_handler.is_killswitch_connection_active:
-            # Currently we assume the server IP is and IPv4 address.
-            self._ks_handler.add(vpn_server.server_ip)
+        custom_future = Future()
 
-        if not self._ks_handler.is_killswitch_connection_active:
-            raise KillSwitchException("Kill Switch is not running")
+        def on_add_full_killswitch_connection_finish(add_full_ks_future: Future):
+            def on_remove_routed_killswitch_connection_finish(remove_routed_ks_future: Future):
+                def on_add_routed_killswitch_finish(add_routed_ks_future: Future):
+                    def on_remove_full_killswitch_finish(remove_full_ks_future: Future):
+                        try:
+                            remove_full_ks_future.result()
+                            custom_future.set_result(None)
+                            logger.debug("No issue removing full kill switch during ENABLE")
+                        except GLib.GError as excp:
+                            traceback = sys.exc_info()[2]
+                            custom_future.set_exception(
+                                KillSwitchException(
+                                    f"Unable to remove full kill switch: {excp}"
+                                ).with_traceback(traceback)
+                            )
+                    try:
+                        add_routed_ks_future.result()
+                        logger.debug("No issue adding routed kill switch during ENABLE")
+                    except GLib.GError as excp:
+                        traceback = sys.exc_info()[2]
+                        custom_future.set_exception(
+                            KillSwitchException(
+                                f"Unable to add routed kill switch connection: {excp}"
+                            ).with_traceback(traceback)
+                        )
+                    else:
+                        remove_full_ks_future = self._ks_handler.remove_full_killswitch_connection()
+                        remove_full_ks_future.add_done_callback(
+                            on_remove_full_killswitch_finish)
+
+                add_routed = vpn_server and vpn_server.server_ip
+
+                try:
+                    remove_routed_ks_future.result()
+                    logger.debug("No issue removing routed kill switch during ENABLE")
+                    if not add_routed:
+                        custom_future.set_result(None)
+                except GLib.GError as excp:
+                    traceback = sys.exc_info()[2]
+                    custom_future.set_exception(
+                        KillSwitchException(
+                            f"Unable to remove routed kill switch connection: {excp}"
+                        ).with_traceback(traceback)
+                    )
+                else:
+                    if add_routed:
+                        add_routed_ks_future = self._ks_handler.add_routed_killswitch_connection(
+                            vpn_server.server_ip)
+                        add_routed_ks_future.add_done_callback(
+                            on_add_routed_killswitch_finish)
+
+            try:
+                add_full_ks_future.result()
+                logger.debug("No issue adding full kill switch during ENABLE")
+            except GLib.GError as excp:
+                traceback = sys.exc_info()[2]
+                custom_future.set_exception(
+                    KillSwitchException(
+                        f"Unable to add full kill switch connection: {excp}"
+                    ).with_traceback(traceback)
+                )
+            else:
+                remove_routed_ks_future = self._ks_handler.remove_routed_killswitch_connection()
+                remove_routed_ks_future.add_done_callback(
+                    on_remove_routed_killswitch_connection_finish)
+
+        add_full_ks_future = self._ks_handler.add_full_killswitch_connection()
+        add_full_ks_future.add_done_callback(on_add_full_killswitch_connection_finish)
+
+        return custom_future
 
     def disable(self):
         """Disables general kill switch."""
-        if self._ks_handler.is_killswitch_connection_active:
-            self._ks_handler.remove()
+        custom_future = Future()
 
-        if self._ks_handler.is_killswitch_connection_active:
-            raise KillSwitchException("Kill Switch is not running")
+        def _on_full_ks_removed(remove_full_ks: Future):
+            def _on_routed_ks_removed(remove_routed_ks: Future):
+                try:
+                    remove_routed_ks.result()
+                    logger.debug("No issue removing routed kill switch during DISABLE")
+                except GLib.GError as excp:
+                    traceback = sys.exc_info()[2]
+                    custom_future.set_exception(
+                        KillSwitchException(
+                            f"Unable to remove routed kill switch: {excp}"
+                        ).with_traceback(traceback)
+                    )
+                else:
+                    custom_future.set_result(None)
+
+            try:
+                remove_full_ks.result()
+                logger.debug("No issue removing full kill switch during DISABLE")
+            except GLib.GError as excp:
+                traceback = sys.exc_info()[2]
+                custom_future.set_exception(
+                    KillSwitchException(
+                        f"Unable to remove full kill switch: {excp}"
+                    ).with_traceback(traceback)
+                )
+            else:
+                remove_routed_ks_future = self._ks_handler.remove_routed_killswitch_connection()
+                remove_routed_ks_future.add_done_callback(_on_routed_ks_removed)
+
+        remove_full_ks_future = self._ks_handler.remove_full_killswitch_connection()
+        remove_full_ks_future.add_done_callback(_on_full_ks_removed)
+
+        return custom_future
 
     def update(self, vpn_server):
         """Currently not being used"""
@@ -102,6 +196,7 @@ class NMKillSwitch(KillSwitch):
     def disable_ipv6_leak_protection(self) -> Future:
         """Disables IPv6 kill switch."""
         custom_future = Future()
+
         if not self._ks_handler.is_ipv6_leak_protection_connection_active:
             custom_future.set_result(None)
             return custom_future

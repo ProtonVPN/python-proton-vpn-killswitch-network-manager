@@ -23,13 +23,11 @@ from concurrent.futures import Future
 from threading import Thread, Lock
 from typing import Callable, Optional
 
-import gi
-gi.require_version("NM", "1.0")  # noqa: required before importing NM module
-# pylint: disable=wrong-import-position
-from gi.repository import NM, GLib # noqa
+from gi.repository import NM, GLib, Gio
 
-from proton.vpn import logging # noqa
-from proton.vpn.killswitch.interface.exceptions import KillSwitchException # noqa
+
+from proton.vpn import logging
+from proton.vpn.killswitch.interface.exceptions import KillSwitchException
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +132,7 @@ class NMClient:
                 # https://lazka.github.io/pgi-docs/index.html#NM-1.0/classes/Client.html#NM.Client.new_finish
                 if not result:
                     raise KillSwitchException(
-                        "An unexpected error occurred initializing NMCLient"
+                        "An unexpected error occurred initializing NMClient"
                     )
 
                 future.set_result(result)
@@ -221,3 +219,50 @@ class NMClient:
     def get_nm_running(self) -> bool:
         """Returns if NetworkManager daemon is running or not."""
         return self._nm_client.get_nm_running()
+
+    def connectivity_check_get_enabled(self) -> bool:
+        """Returns if connectivity check is enabled or not."""
+        return self._nm_client.connectivity_check_get_enabled()
+
+    def disable_connectivity_check(self) -> Future:
+        """Since `connectivity_check_set_enabled` has been deprecated,
+        we have to resort to lower lever commands.
+        https://lazka.github.io/pgi-docs/#NM-1.0/classes/Client.html#NM.Client.connectivity_check_set_enabled
+
+        This change is necessary since if this feature is enabled,
+        dummy connection are inflated with a value of 20000.
+
+        https://developer-old.gnome.org/NetworkManager/stable/NetworkManager.conf.html
+        (see under `connectivity section`)
+        """
+        return self._dbus_set_property(
+            object_path="/org/freedesktop/NetworkManager",
+            interface_name="org.freedesktop.NetworkManager",
+            property_name="ConnectivityCheckEnabled",
+            value=GLib.Variant("b", False),
+            timeout_msec=-1,
+            cancellable=None
+        )
+
+    def _dbus_set_property(
+            self, *userdata, object_path: str, interface_name: str, property_name: str,
+            value: GLib.Variant, timeout_msec: int = -1,
+            cancellable: Gio.Cancellable = None,
+    ) -> Future:  # pylint: disable=too-many-arguments
+        """Set NM properties since dedicated methods have been deprecated deprecated.
+        Source: https://lazka.github.io/pgi-docs/#NM-1.0/classes/Client.html"""  # noqa
+
+        callback, future = self.create_nmcli_callback(
+            finish_method_name="dbus_set_property_finish"
+        )
+
+        def set_property_async():
+            self._assert_running_on_main_loop_thread()
+            self._nm_client.dbus_set_property(
+                object_path, interface_name, property_name,
+                value, timeout_msec, cancellable, callback,
+                userdata
+            )
+
+        self._run_on_main_loop_thread(set_property_async)
+        return future

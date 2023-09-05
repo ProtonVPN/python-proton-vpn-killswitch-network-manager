@@ -22,7 +22,7 @@ along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 import uuid
 from dataclasses import dataclass, field
-from proton.vpn.killswitch.backend.linux.networkmanager.nmclient import NM, GLib
+from gi.repository import NM, GLib
 
 
 @dataclass
@@ -51,7 +51,7 @@ class KillSwitchConnection:  # pylint: disable=too-few-public-methods
         self,
         general_settings: KillSwitchGeneralConfig,
         ipv6_settings: KillSwitchIPConfig,
-        ipv4_settings: KillSwitchIPConfig = None
+        ipv4_settings: KillSwitchIPConfig
     ):
         self._connection_profile = None
         self._general_settings = general_settings
@@ -88,9 +88,14 @@ class KillSwitchConnection:  # pylint: disable=too-few-public-methods
         self._connection_profile.add_setting(s_ipv6)
         self._connection_profile.add_setting(s_dummy)
 
+        # Ensures the properties get correct values
+        # https://lazka.github.io/pgi-docs/index.html#NM-1.0/classes/Connection.html#NM.Connection.verify
+        if not s_con.verify():
+            raise RuntimeError("Connection has invalid properties")
+
     def _generate_ipv4_settings(self):
         """
-        For documentaion see:
+        For documentation see:
         https://lazka.github.io/pgi-docs/index.html#NM-1.0/classes/SettingIPConfig.html#NM.SettingIPConfig
         https://lazka.github.io/pgi-docs/NM-1.0/classes/IPAddress.html#NM.IPAddress
         https://lazka.github.io/pgi-docs/NM-1.0/classes/IPRoute.html#NM.IPRoute.new
@@ -101,30 +106,31 @@ class KillSwitchConnection:  # pylint: disable=too-few-public-methods
             s_ip4.set_property(NM.SETTING_IP_CONFIG_METHOD, "disabled")
             return s_ip4
 
+        # Inform NM that the IP configuration is manual
         s_ip4.set_property(NM.SETTING_IP_CONFIG_METHOD, "manual")
 
-        # add addresses
+        # Add addresses
         for address in self._ipv4_settings.addresses:
-            ip, prefix = address.split("/")  # pylint: disable=invalid-name
+            ipv4, prefix = str(address).split("/")
             s_ip4.add_address(
-                NM.IPAddress.new(GLib.SYSDEF_AF_INET, ip, int(prefix))
+                NM.IPAddress.new(GLib.SYSDEF_AF_INET, ipv4, int(prefix))
             )
 
-        # add DNS
+        # Add DNS
         for dns in self._ipv4_settings.dns:
             s_ip4.add_dns(dns)
 
-        if self._ipv4_settings.routes:
-            for route in self._ipv4_settings.routes:
-                ip, prefix = route.split("/")  # pylint: disable=invalid-name
-                s_ip4.add_route(
-                    NM.IPRoute.new(
-                        family=GLib.SYSDEF_AF_INET, dest=ip, prefix=int(prefix),
-                        next_hop=None, metric=-1
-                    )
+        # Add routes
+        for route in self._ipv4_settings.routes:
+            ipv4, prefix = str(route).split("/")
+            s_ip4.add_route(
+                NM.IPRoute.new(
+                    family=GLib.SYSDEF_AF_INET, dest=ipv4, prefix=int(prefix),
+                    next_hop=None, metric=-1
                 )
+            )
 
-        # rest of the configs that don't have a method
+        # Rest of the configs
         s_ip4.props.dns_priority = self._ipv4_settings.dns_priority
         s_ip4.props.route_metric = self._ipv4_settings.route_metric
         s_ip4.props.ignore_auto_dns = self._ipv4_settings.ignore_auto_dns
@@ -136,7 +142,7 @@ class KillSwitchConnection:  # pylint: disable=too-few-public-methods
 
     def _generate_ipv6_settings(self):
         """
-        For documentaion see:
+        For documentation see:
         https://lazka.github.io/pgi-docs/index.html#NM-1.0/classes/SettingIPConfig.html#NM.SettingIPConfig
         https://lazka.github.io/pgi-docs/NM-1.0/classes/IPAddress.html#NM.IPAddress
         https://lazka.github.io/pgi-docs/NM-1.0/classes/IPRoute.html#NM.IPRoute.new
@@ -147,20 +153,21 @@ class KillSwitchConnection:  # pylint: disable=too-few-public-methods
             s_ip6.set_property(NM.SETTING_IP_CONFIG_METHOD, "disabled")
             return s_ip6
 
+        # inform NM that the IP configuration is manual
         s_ip6.set_property(NM.SETTING_IP_CONFIG_METHOD, "manual")
 
-        # add addresses
+        # Add addresses
         for address in self._ipv6_settings.addresses:
-            ip, prefix = address.split("/")  # pylint: disable=invalid-name
+            ip, prefix = str(address).split("/")  # pylint: disable=invalid-name
             s_ip6.add_address(
                 NM.IPAddress.new(GLib.SYSDEF_AF_INET6, ip, int(prefix))
             )
 
-        # add DNS
+        # Add DNS
         for dns in self._ipv6_settings.dns:
             s_ip6.add_dns(dns)
 
-        # rest of the configs that don't have a method
+        # Rest of the configs
         s_ip6.props.dns_priority = self._ipv6_settings.dns_priority
         s_ip6.props.route_metric = self._ipv6_settings.route_metric
         s_ip6.props.ignore_auto_dns = self._ipv6_settings.ignore_auto_dns
