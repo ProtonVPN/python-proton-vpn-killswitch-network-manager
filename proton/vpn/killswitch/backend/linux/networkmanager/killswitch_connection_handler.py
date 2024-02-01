@@ -20,7 +20,9 @@ You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 from ipaddress import ip_network
-from concurrent.futures import Future
+import asyncio
+import concurrent.futures
+
 from proton.vpn import logging
 from proton.vpn.killswitch.backend.linux.networkmanager.nmclient import NMClient
 from proton.vpn.killswitch.backend.linux.networkmanager.killswitch_connection import (
@@ -37,6 +39,11 @@ IPV4_ROUTED_INTERFACE_NAME = "pvpnrouteintrf0"
 
 IPV6_HUMAN_READABLE_ID = "pvpn-killswitch-ipv6"
 IPV6_INTERFACE_NAME = "ipv6leakintrf0"
+
+
+async def _wrap_future(future: concurrent.futures.Future):
+    """Wraps a concurrent.future.Future object in an asyncio.Future object."""
+    return await asyncio.wrap_future(future, loop=asyncio.get_running_loop())
 
 
 class KillSwitchConnectionHandler:
@@ -78,19 +85,18 @@ class KillSwitchConnectionHandler:
         """Returns if routed kill switch is active or not."""
         return bool(self.nm_client.get_active_connection(IPV4_ROUTED_HUMAN_READABLE_ID))
 
-    def add_full_killswitch_connection(self) -> Future:
+    async def add_full_killswitch_connection(self):
         """Adds full kill switch connection to Network Manager. This connection blocks all
         outgoing traffic when not connected to VPN, with the exception of torrent client which will
         require to be bonded to the VPN interface.."""
-        self._ensure_connectivity_check_is_disabled()
+        await self._ensure_connectivity_check_is_disabled()
 
         connection = self.nm_client.get_active_connection(
             conn_id=IPV4_HUMAN_READABLE_ID)
 
         if connection:
-            future = Future()
-            future.set_result(None)
-            return future
+            logger.warning("Kill switch was already present.")
+            return
 
         general_config = KillSwitchGeneralConfig(
             human_readable_id=IPV4_HUMAN_READABLE_ID,
@@ -110,10 +116,9 @@ class KillSwitchConnectionHandler:
             ipv4_settings=ipv4_config,
             ipv6_settings=None,
         )
-        future = self.nm_client.add_connection_async(killswitch.connection)
-        return future
+        await _wrap_future(self.nm_client.add_connection_async(killswitch.connection))
 
-    def add_routed_killswitch_connection(self, server_ip: str):
+    async def add_routed_killswitch_connection(self, server_ip: str):
         """Add routed kill switch connection to Network Manager.
 
         This connection has a "hole punched in it", to allow only the server IP to
@@ -121,7 +126,7 @@ class KillSwitchConnectionHandler:
         temporary though as it will be removed once we establish a VPN connection and will
         get replaced by the full kill switch connection.
         """
-        self._ensure_connectivity_check_is_disabled()
+        await self._ensure_connectivity_check_is_disabled()
 
         subnet_list = list(ip_network('0.0.0.0/0').address_exclude(
             ip_network(server_ip)
@@ -144,21 +149,20 @@ class KillSwitchConnectionHandler:
             ipv4_settings=ipv4_config,
             ipv6_settings=None,
         )
-        future = self.nm_client.add_connection_async(killswitch.connection)
-        return future
+        await _wrap_future(self.nm_client.add_connection_async(killswitch.connection))
 
-    def add_ipv6_leak_protection(self) -> Future:
+    async def add_ipv6_leak_protection(self):
         """Adds IPv6 kill switch to NetworkManager. This connection is mainly
         to prevent IPv6 leaks while using IPv4."""
-        self._ensure_connectivity_check_is_disabled()
+        await self._ensure_connectivity_check_is_disabled()
 
         connection = self.nm_client.get_active_connection(
-            conn_id=IPV4_HUMAN_READABLE_ID)
+            conn_id=IPV6_HUMAN_READABLE_ID)
 
         if connection:
-            future = Future()
-            future.set_result(None)
-            return future
+            # FIXME: this does not work when reconnection is triggered (check full ks for same issue)
+            logger.warning("IPv6 leak protection already present.")
+            return
 
         general_config = KillSwitchGeneralConfig(
             human_readable_id=IPV6_HUMAN_READABLE_ID,
@@ -178,40 +182,33 @@ class KillSwitchConnectionHandler:
             ipv4_settings=None,
             ipv6_settings=ip_config,
         )
-        future = self.nm_client.add_connection_async(killswitch.connection)
-        return future
 
-    def remove_full_killswitch_connection(self) -> Future:
+        await _wrap_future(self.nm_client.add_connection_async(killswitch.connection))
+
+    async def remove_full_killswitch_connection(self):
         """Removes full kill switch connection."""
-        return self._remove_connection(IPV4_HUMAN_READABLE_ID)
+        await self._remove_connection(IPV4_HUMAN_READABLE_ID)
 
-    def remove_routed_killswitch_connection(self) -> Future:
+    async def remove_routed_killswitch_connection(self):
         """Removes routed kill switch connection."""
-        return self._remove_connection(IPV4_ROUTED_HUMAN_READABLE_ID)
+        await self._remove_connection(IPV4_ROUTED_HUMAN_READABLE_ID)
 
-    def remove_ipv6_leak_protection(self) -> Future:
+    async def remove_ipv6_leak_protection(self):
         """Removes IPv6 kill switch connection."""
-        return self._remove_connection(IPV6_HUMAN_READABLE_ID)
+        await self._remove_connection(IPV6_HUMAN_READABLE_ID)
 
-    def _remove_connection(self, connection_id: str) -> Future:
+    async def _remove_connection(self, connection_id: str):
         connection = self.nm_client.get_connection(
             conn_id=connection_id)
 
         logger.debug(f"Attempting to remove {connection_id}: {connection}")
 
-        if connection is None:
-            logger.debug(f"There was no {connection_id} to remove: {connection}")
-            future = Future()
-            future.set_result(None)
-            return future
+        if not connection:
+            logger.debug(f"There was no {connection_id} to remove")
+            return
 
-        future = self.nm_client.remove_connection_async(connection)
-        return future
+        await _wrap_future(self.nm_client.remove_connection_async(connection))
 
-    def _ensure_connectivity_check_is_disabled(self):
-        def _disable_connectivity_check_finish(_future: Future):
-            _future.result()
-
+    async def _ensure_connectivity_check_is_disabled(self):
         if self.is_connectivity_check_enabled:
-            future = self.nm_client.disable_connectivity_check()
-            future.add_done_callback(_disable_connectivity_check_finish)
+            await _wrap_future(self.nm_client.disable_connectivity_check())
