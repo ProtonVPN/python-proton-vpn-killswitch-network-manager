@@ -20,9 +20,12 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
-import uuid
 from dataclasses import dataclass, field
-from gi.repository import NM, GLib
+import uuid
+
+import gi
+gi.require_version("NM", "1.0")
+from gi.repository import NM, GLib  # pylint: disable=C0413 # noqa: E402
 
 
 @dataclass

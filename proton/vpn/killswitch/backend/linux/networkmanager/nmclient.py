@@ -21,15 +21,22 @@ along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
 from concurrent.futures import Future
 from threading import Thread, Lock
-from typing import Callable, Optional
+from typing import Optional
 
-from gi.repository import NM, GLib, Gio
+import gi
+gi.require_version("NM", "1.0")
+from gi.repository import NM, GLib, Gio, GObject  # pylint: disable=C0413 # noqa: E402
 
-
-from proton.vpn import logging
-from proton.vpn.killswitch.interface.exceptions import KillSwitchException
+from proton.vpn import logging  # noqa: E402 pylint: disable=wrong-import-position
 
 logger = logging.getLogger(__name__)
+
+
+def _create_future():
+    """Creates a future and sets its internal state as running."""
+    future = Future()
+    future.set_running_or_notify_cancel()
+    return future
 
 
 class NMClient:
@@ -64,31 +71,28 @@ class NMClient:
     @classmethod
     def _initialize_nm_client_singleton(cls):
         cls._main_context = GLib.MainContext()
-        cls._nm_client = NM.Client()
+
         # Setting daemon=True when creating the thread makes that this thread
         # exits abruptly when the python process exits. It would be better to
         # exit the thread running the main loop calling self._main_loop.quit().
-        Thread(target=cls._run_main_loop, daemon=True).start()
+        Thread(target=cls._run_glib_loop, daemon=True).start()
 
-        callback, future = cls.create_nmcli_callback(
-            finish_method_name="new_finish"
-        )
+        def _init_nm_client():
+            # It's important the NM.Client instance is created in the thread
+            # running the GLib event loop so that then that's the thread used
+            # for all GLib asynchronous operations.
+            return NM.Client.new(cancellable=None)
 
-        def new_async():
-            cls._assert_running_on_main_loop_thread()
-            cls._nm_client.new_async(cancellable=None, callback=callback, user_data=None)
-
-        cls._run_on_main_loop_thread(new_async)
-        cls._nm_client = future.result()
+        cls._nm_client = cls._run_on_glib_loop_thread(_init_nm_client).result()
 
     @classmethod
-    def _run_main_loop(cls):
+    def _run_glib_loop(cls):
         main_loop = GLib.MainLoop(cls._main_context)
         cls._main_context.push_thread_default()
         main_loop.run()
 
     @classmethod
-    def _assert_running_on_main_loop_thread(cls):
+    def _assert_running_on_glib_loop_thread(cls):
         """
         This method asserts that the thread running it is the one iterating
         GLib's main loop.
@@ -103,43 +107,19 @@ class NMClient:
         assert cls._main_context.is_owner()
 
     @classmethod
-    def _run_on_main_loop_thread(cls, function):
-        cls._main_context.invoke_full(priority=GLib.PRIORITY_DEFAULT, function=function)
+    def _run_on_glib_loop_thread(cls, function, *args, **kwargs) -> Future:
+        future = _create_future()
 
-    @classmethod
-    def create_nmcli_callback(cls, finish_method_name: str) -> (Callable, Future):
-        """Creates a callback for the NM client finish method and a Future that will
-        resolve once the callback is called."""
-        future = Future()
-        future.set_running_or_notify_cancel()
-
-        def callback(source_object, res, userdata):  # pylint: disable=unused-argument
-            cls._assert_running_on_main_loop_thread()
+        def wrapper():
+            cls._assert_running_on_glib_loop_thread()
             try:
-                # On errors, according to the docs, the callback can be called
-                # with source_object/res set to None.
-                # https://lazka.github.io/pgi-docs/index.html#NM-1.0/classes/Client.html#NM.Client.new_async
-                if not source_object or not res:
-
-                    raise KillSwitchException(
-                        f"An unexpected error occurred initializing NMClient: "
-                        f"source_object = {source_object}, res = {res}."
-                    )
-
-                result = getattr(source_object, finish_method_name)(res)
-
-                # According to the docs, None is returned on errors
-                # https://lazka.github.io/pgi-docs/index.html#NM-1.0/classes/Client.html#NM.Client.new_finish
-                if not result:
-                    raise KillSwitchException(
-                        "An unexpected error occurred initializing NMClient"
-                    )
-
-                future.set_result(result)
+                future.set_result(function(*args, **kwargs))
             except BaseException as exc:  # pylint: disable=broad-except
                 future.set_exception(exc)
 
-        return callback, future
+        cls._main_context.invoke_full(priority=GLib.PRIORITY_DEFAULT, function=wrapper)
+
+        return future
 
     def __init__(self):
         self.initialize_nm_client_singleton()
@@ -153,22 +133,53 @@ class NMClient:
         :param connection: connection to be added.
         :return: a Future to keep track of completion.
         """
-        callback, future = self.create_nmcli_callback(
-            finish_method_name="add_connection_finish"
-        )
+        future_conn_activated = _create_future()
 
-        def add_connection_async():
-            self._assert_running_on_main_loop_thread()
+        def _on_connection_added(nm_client, res, _user_data):
+            if (
+                    not nm_client or not res or
+                    not (remote_connection := nm_client.add_connection_finish(res))
+            ):
+                future_conn_activated.set_exception(
+                    RuntimeError(f"Error setting adding KS connection: {nm_client=}, {res=}")
+                )
+                return
+
+            def _on_interface_state_changed(_device, new_state, _old_state, _reason):
+                logger.debug(
+                    f"{remote_connection.get_interface_name()} interface state changed "
+                    f"to {NM.DeviceState(new_state).value_name}"
+                )
+                if (
+                        NM.DeviceState(new_state) == NM.DeviceState.ACTIVATED
+                        and not future_conn_activated.done()
+                ):
+                    future_conn_activated.set_result(remote_connection)
+
+            device = self._nm_client.get_device_by_iface(remote_connection.get_interface_name())
+            handler_id = device.connect("state-changed", _on_interface_state_changed)
+            future_conn_activated.add_done_callback(
+                lambda f: self._run_on_glib_loop_thread(
+                    GObject.signal_handler_disconnect, device, handler_id
+                ).result()
+            )
+
+            # The callback is manually called here because sometimes is never called. I assume that
+            # when we connect to the state-changes signal the interface has already been activated.
+            _on_interface_state_changed(device, device.get_state().real, None, None)
+
+        def _add_connection_async():
             self._nm_client.add_connection_async(
                 connection=connection,
                 save_to_disk=save_to_disk,
                 cancellable=None,
-                callback=callback,
+                callback=_on_connection_added,
                 user_data=None
             )
 
-        self._run_on_main_loop_thread(add_connection_async)
-        return future
+        self._run_on_glib_loop_thread(_add_connection_async).result()
+
+        return future_conn_activated
 
     def remove_connection_async(
             self, connection: NM.RemoteConnection
@@ -179,20 +190,44 @@ class NMClient:
         :param connection: connection to be removed.
         :return: a Future to keep track of completion.
         """
-        callback, future = self.create_nmcli_callback(
-            finish_method_name="delete_finish"
-        )
+        future_interface_removed = _create_future()
 
-        def delete_async():
-            self._assert_running_on_main_loop_thread()
+        def _on_connection_removed(connection, result, _user_data):
+            if not connection or not result or not connection.delete_finish(result):
+                future_interface_removed.set_exception(
+                    RuntimeError(f"Error removing KS connection: {connection=}, {result=}")
+                )
+                return
+
+        def _on_interface_state_changed(device, new_state, _old_state, _reason):
+            logger.debug(
+                f"{device.get_iface()} interface state changed to "
+                f"{NM.DeviceState(new_state).value_name}"
+            )
+            if (
+                    NM.DeviceState(new_state) == NM.DeviceState.DISCONNECTED
+                    and not future_interface_removed.done()
+            ):
+                future_interface_removed.set_result(None)
+
+        def _remove_connection_async():
+            device = self._nm_client.get_device_by_iface(connection.get_interface_name())
+            handler_id = device.connect("state-changed", _on_interface_state_changed)
+            future_interface_removed.add_done_callback(
+                lambda f: self._run_on_glib_loop_thread(
+                    GObject.signal_handler_disconnect, device, handler_id
+                ).result()
+            )
+
             connection.delete_async(
                 None,
-                callback,
+                _on_connection_removed,
                 None
             )
 
-        self._run_on_main_loop_thread(delete_async)
-        return future
+        self._run_on_glib_loop_thread(_remove_connection_async).result()
+
+        return future_interface_removed
 
     def get_active_connection(self, conn_id: str) -> Optional[NM.ActiveConnection]:
         """
@@ -200,13 +235,16 @@ class NMClient:
         :param conn_id: ID of the active connection.
         :return: the active connection if it was found. Otherwise, None.
         """
-        active_connections = self._nm_client.get_active_connections()
+        def _get_active_connection():
+            active_connections = self._nm_client.get_active_connections()
 
-        for connection in active_connections:
-            if connection.get_id() == conn_id:
-                return connection
+            for connection in active_connections:
+                if connection.get_id() == conn_id:
+                    return connection
 
-        return None
+            return None
+
+        return self._run_on_glib_loop_thread(_get_active_connection).result()
 
     def get_connection(self, conn_id: str) -> Optional[NM.RemoteConnection]:
         """
@@ -214,15 +252,21 @@ class NMClient:
         :param conn_id: ID of the connection.
         :return: the connection if it was found. Otherwise, None.
         """
-        return self._nm_client.get_connection_by_id(conn_id)
+        return self._run_on_glib_loop_thread(
+            self._nm_client.get_connection_by_id, conn_id
+        ).result()
 
     def get_nm_running(self) -> bool:
         """Returns if NetworkManager daemon is running or not."""
-        return self._nm_client.get_nm_running()
+        return self._run_on_glib_loop_thread(
+            self._nm_client.get_nm_running
+        ).result()
 
     def connectivity_check_get_enabled(self) -> bool:
         """Returns if connectivity check is enabled or not."""
-        return self._nm_client.connectivity_check_get_enabled()
+        return self._run_on_glib_loop_thread(
+            self._nm_client.connectivity_check_get_enabled
+        ).result()
 
     def disable_connectivity_check(self) -> Future:
         """Since `connectivity_check_set_enabled` has been deprecated,
@@ -252,17 +296,27 @@ class NMClient:
         """Set NM properties since dedicated methods have been deprecated deprecated.
         Source: https://lazka.github.io/pgi-docs/#NM-1.0/classes/Client.html"""  # noqa
 
-        callback, future = self.create_nmcli_callback(
-            finish_method_name="dbus_set_property_finish"
-        )
+        future = _create_future()
 
-        def set_property_async():
-            self._assert_running_on_main_loop_thread()
+        def _on_property_set(nm_client, res, _user_data):
+            if not nm_client or not res or not nm_client.dbus_set_property_finish(res):
+                future.set_exception(
+                    RuntimeError(
+                        f"Error disabling network connectivity check: {nm_client=}, {res=}"
+                    )
+                )
+                return
+
+            future.set_result(None)
+
+        def _set_property_async():
+            self._assert_running_on_glib_loop_thread()
             self._nm_client.dbus_set_property(
                 object_path, interface_name, property_name,
-                value, timeout_msec, cancellable, callback,
+                value, timeout_msec, cancellable, _on_property_set,
                 userdata
             )
 
-        self._run_on_main_loop_thread(set_property_async)
+        self._run_on_glib_loop_thread(_set_property_async).result()
+
         return future

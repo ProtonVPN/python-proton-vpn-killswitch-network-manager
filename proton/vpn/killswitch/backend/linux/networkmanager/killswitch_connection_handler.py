@@ -41,9 +41,12 @@ IPV6_HUMAN_READABLE_ID = "pvpn-killswitch-ipv6"
 IPV6_INTERFACE_NAME = "ipv6leakintrf0"
 
 
-async def _wrap_future(future: concurrent.futures.Future):
+async def _wrap_future(future: concurrent.futures.Future, timeout=5):
     """Wraps a concurrent.future.Future object in an asyncio.Future object."""
-    return await asyncio.wrap_future(future, loop=asyncio.get_running_loop())
+    return await asyncio.wait_for(
+        asyncio.wrap_future(future, loop=asyncio.get_running_loop()),
+        timeout=timeout
+    )
 
 
 class KillSwitchConnectionHandler:
@@ -95,7 +98,7 @@ class KillSwitchConnectionHandler:
             conn_id=IPV4_HUMAN_READABLE_ID)
 
         if connection:
-            logger.warning("Kill switch was already present.")
+            logger.debug("Kill switch was already present.")
             return
 
         general_config = KillSwitchGeneralConfig(
@@ -116,7 +119,9 @@ class KillSwitchConnectionHandler:
             ipv4_settings=ipv4_config,
             ipv6_settings=None,
         )
+        logger.debug("Adding full kill switch...")
         await _wrap_future(self.nm_client.add_connection_async(killswitch.connection))
+        logger.debug("Full kill switch added.")
 
     async def add_routed_killswitch_connection(self, server_ip: str):
         """Add routed kill switch connection to Network Manager.
@@ -149,7 +154,9 @@ class KillSwitchConnectionHandler:
             ipv4_settings=ipv4_config,
             ipv6_settings=None,
         )
+        logger.debug("Adding routed kill switch...")
         await _wrap_future(self.nm_client.add_connection_async(killswitch.connection))
+        logger.debug("Routed kill switch added.")
 
     async def add_ipv6_leak_protection(self):
         """Adds IPv6 kill switch to NetworkManager. This connection is mainly
@@ -160,8 +167,7 @@ class KillSwitchConnectionHandler:
             conn_id=IPV6_HUMAN_READABLE_ID)
 
         if connection:
-            # FIXME: this does not work when reconnection is triggered (check full ks for same issue)
-            logger.warning("IPv6 leak protection already present.")
+            logger.debug("IPv6 leak protection already present.")
             return
 
         general_config = KillSwitchGeneralConfig(
@@ -183,19 +189,27 @@ class KillSwitchConnectionHandler:
             ipv6_settings=ip_config,
         )
 
+        logger.debug("Adding IPv6 leak protection...")
         await _wrap_future(self.nm_client.add_connection_async(killswitch.connection))
+        logger.debug("IP6 leak protection added.")
 
     async def remove_full_killswitch_connection(self):
         """Removes full kill switch connection."""
+        logger.debug("Removing full kill switch...")
         await self._remove_connection(IPV4_HUMAN_READABLE_ID)
+        logger.debug("Full kill switch removed.")
 
     async def remove_routed_killswitch_connection(self):
         """Removes routed kill switch connection."""
+        logger.debug("Removing routed kill switch...")
         await self._remove_connection(IPV4_ROUTED_HUMAN_READABLE_ID)
+        logger.debug("Routed kill switch removed.")
 
     async def remove_ipv6_leak_protection(self):
         """Removes IPv6 kill switch connection."""
+        logger.debug("Removing IPv6 leak protection...")
         await self._remove_connection(IPV6_HUMAN_READABLE_ID)
+        logger.debug("IP6 leak protection removed.")
 
     async def _remove_connection(self, connection_id: str):
         connection = self.nm_client.get_connection(
@@ -212,3 +226,4 @@ class KillSwitchConnectionHandler:
     async def _ensure_connectivity_check_is_disabled(self):
         if self.is_connectivity_check_enabled:
             await _wrap_future(self.nm_client.disable_connectivity_check())
+            logger.info("Network connectivity check was disabled.")

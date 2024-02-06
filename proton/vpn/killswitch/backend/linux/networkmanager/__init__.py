@@ -19,9 +19,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
-import gi
 from proton.vpn.killswitch.backend.linux.networkmanager.nmkillswitch import NMKillSwitch
 
-gi.require_version("NM", "1.0")
 
 __all__ = ["NMKillSwitch"]

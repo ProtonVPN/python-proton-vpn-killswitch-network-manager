@@ -1,5 +1,5 @@
 %define unmangled_name proton-vpn-killswitch-network-manager
-%define version 0.2.0
+%define version 0.3.0
 %define release 1
 
 Prefix: %{_prefix}
@@ -50,6 +50,9 @@ python3 setup.py install --single-version-externally-managed -O1 --root=$RPM_BUI
 %defattr(-,root,root)
 
 %changelog
+* Wed Feb 07 2024 Josep Llaneras <josep.llaneras@proton.ch> 0.3.0
+- Wait for target interface state when adding/removing NM connections
+
 * Mon Sep 04 2023 Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch> 0.2.0
 - Implement kill switch
 

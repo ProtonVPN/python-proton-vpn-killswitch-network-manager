@@ -16,13 +16,10 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
-from unittest.mock import Mock, PropertyMock, patch
-from concurrent.futures import Future
+from unittest.mock import Mock, AsyncMock, call
 import pytest
 
-from proton.vpn.killswitch.backend.linux.networkmanager.nmclient import GLib
 from proton.vpn.killswitch.backend.linux.networkmanager import NMKillSwitch
-from proton.vpn.killswitch.interface.exceptions import KillSwitchException
 
 
 @pytest.fixture
@@ -33,217 +30,74 @@ def vpn_server():
     return vpn_server_mock
 
 
-def test_sucessfully_enable_full_killswitch_and_remove_routed_killswitch_connection():
-    future_mock = Future()
-    future_mock.set_result(None)
+@pytest.mark.asyncio
+async def test_enable_without_vpn_server_adds_full_ks_and_removes_routed_ks():
+    ks_handler_mock = AsyncMock()
+    nm_killswitch = NMKillSwitch(ks_handler_mock)
 
-    ks_handler_mock = Mock()
-    ks_handler_mock.add_full_killswitch_connection.return_value = future_mock
-    ks_handler_mock.remove_routed_killswitch_connection.return_value = future_mock
+    await nm_killswitch.enable()
+
+    assert ks_handler_mock.method_calls == [
+        call.add_full_killswitch_connection(),
+        call.remove_routed_killswitch_connection(),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_enable_with_vpn_server(vpn_server):
+    """
+    When enabling the KS specifying a vpn server to connect to we expect:
+     1) The full KS is added first, to block all network traffic until the routed KS is set up.
+     2) The routed KS is removed (if found).
+     3) A new routed KS whitelisting the VPN server IP is added.
+     4) The full KS is removed to let the routed KS take over.
+    """
+    ks_handler_mock = AsyncMock()
+    nm_killswitch = NMKillSwitch(ks_handler_mock)
+
+    await nm_killswitch.enable(vpn_server)
+
+    assert ks_handler_mock.method_calls == [
+        call.add_full_killswitch_connection(),
+        call.remove_routed_killswitch_connection(),
+        call.add_routed_killswitch_connection(vpn_server.server_ip),
+        call.remove_full_killswitch_connection()
+    ]
+
+
+@pytest.mark.asyncio
+async def test_disable_killswitch_removes_full_and_routed_ks():
+    ks_handler_mock = AsyncMock()
+    nm_killswitch = NMKillSwitch(ks_handler_mock)
+
+    await nm_killswitch.disable()
+
+    assert ks_handler_mock.method_calls == [
+        call.remove_full_killswitch_connection,
+        call.remove_routed_killswitch_connection
+    ]
+
+
+@pytest.mark.asyncio
+async def test_enable_ipv6_leak_protection_adds_ipv6_ks():
+    ks_handler_mock = AsyncMock()
 
     nm_killswitch = NMKillSwitch(ks_handler_mock)
-    future = nm_killswitch.enable()
-    future.result()
+    await nm_killswitch.enable_ipv6_leak_protection()
 
-    assert len(ks_handler_mock.method_calls) == 2
-    ks_handler_mock.add_full_killswitch_connection.assert_called_once_with()
-    ks_handler_mock.remove_routed_killswitch_connection.assert_called_once_with()
+    assert ks_handler_mock.method_calls == [
+        call.add_ipv6_leak_protection
+    ]
 
 
-def test_sucessfully_enable_routed_killswitch_and_remove_full_killswitch(vpn_server):
-    future_mock = Future()
-    future_mock.set_result(None)
-
-    ks_handler_mock = Mock()
-    ks_handler_mock.add_full_killswitch_connection.return_value = future_mock
-    ks_handler_mock.remove_routed_killswitch_connection.return_value = future_mock
-    ks_handler_mock.add_routed_killswitch_connection.return_value = future_mock
-    ks_handler_mock.remove_full_killswitch_connection.return_value = future_mock
+@pytest.mark.asyncio
+async def test_disable_ipv6_leak_protection_removes_ipv6_ks():
+    ks_handler_mock = AsyncMock()
 
     nm_killswitch = NMKillSwitch(ks_handler_mock)
-    future = nm_killswitch.enable(vpn_server)
-    future.result()
+    await nm_killswitch.disable_ipv6_leak_protection()
 
-    assert len(ks_handler_mock.method_calls) == 4
-    ks_handler_mock.add_routed_killswitch_connection.assert_called_once_with(vpn_server.server_ip)
-    ks_handler_mock.remove_full_killswitch_connection.assert_called_once_with()
+    assert ks_handler_mock.method_calls == [
+        call.remove_ipv6_leak_protection
+    ]
 
-
-def test_enable_killswitch_raises_exception_when_full_killswitch_connection_can_not_be_created():
-    future_mock = Future()
-    future_mock.set_exception(GLib.GError)
-
-    ks_handler_mock = Mock()
-    ks_handler_mock.add_full_killswitch_connection.return_value = future_mock
-
-    nm_killswitch = NMKillSwitch(ks_handler_mock)
-    future = nm_killswitch.enable()
-
-    with pytest.raises(KillSwitchException):
-        future.result()
-
-
-def test_enable_killswitch_raises_exception_when_routed_killswitch_connection_can_not_be_removed():
-    future_mock_with_exception = Future()
-    future_mock_with_exception.set_exception(GLib.GError)
-
-    future_mock_with_success = Future()
-    future_mock_with_success.set_result(None)
-
-    ks_handler_mock = Mock()
-    ks_handler_mock.add_full_killswitch_connection.return_value = future_mock_with_success
-    ks_handler_mock.remove_routed_killswitch_connection.return_value = future_mock_with_exception
-
-    nm_killswitch = NMKillSwitch(ks_handler_mock)
-    future = nm_killswitch.enable()
-
-    with pytest.raises(KillSwitchException):
-        future.result()
-
-
-def test_enable_killswitch_raises_exception_when_routed_killswitch_connection_can_not_be_created(vpn_server):
-    future_mock_with_exception = Future()
-    future_mock_with_exception.set_exception(GLib.GError)
-
-    future_mock_with_success = Future()
-    future_mock_with_success.set_result(None)
-
-    ks_handler_mock = Mock()
-    ks_handler_mock.add_full_killswitch_connection.return_value = future_mock_with_success
-    ks_handler_mock.remove_routed_killswitch_connection.return_value = future_mock_with_success
-    ks_handler_mock.add_routed_killswitch_connection.return_value = future_mock_with_exception
-
-    nm_killswitch = NMKillSwitch(ks_handler_mock)
-    future = nm_killswitch.enable(vpn_server)
-
-    with pytest.raises(KillSwitchException):
-        future.result()
-
-
-def test_enable_killswitch_raises_exception_when_full_killswitch_connection_can_not_be_removed(vpn_server):
-    future_mock_with_exception = Future()
-    future_mock_with_exception.set_exception(GLib.GError)
-
-    future_mock_with_success = Future()
-    future_mock_with_success.set_result(None)
-
-    ks_handler_mock = Mock()
-    ks_handler_mock.add_full_killswitch_connection.return_value = future_mock_with_success
-    ks_handler_mock.remove_routed_killswitch_connection.return_value = future_mock_with_success
-    ks_handler_mock.add_routed_killswitch_connection.return_value = future_mock_with_success
-    ks_handler_mock.remove_full_killswitch_connection.return_value = future_mock_with_exception
-
-    nm_killswitch = NMKillSwitch(ks_handler_mock)
-    future = nm_killswitch.enable(vpn_server)
-
-    with pytest.raises(KillSwitchException):
-        future.result()
-
-
-def test_successfully_disable_kilswitch():
-    future_mock = Future()
-    future_mock.set_result(None)
-
-    ks_handler_mock = Mock()
-    ks_handler_mock.remove_full_killswitch_connection.return_value = future_mock
-    ks_handler_mock.remove_routed_killswitch_connection.return_value = future_mock
-
-    nm_killswitch = NMKillSwitch(ks_handler_mock)
-    future = nm_killswitch.disable()
-    future.result()
-
-    assert len(ks_handler_mock.method_calls) == 2
-    ks_handler_mock.remove_full_killswitch_connection.assert_called_once()
-    ks_handler_mock.remove_routed_killswitch_connection.assert_called_once()
-
-
-def test_disable_kilswitch_raises_exception_when_full_killswitch_connection_can_not_be_removed():
-    future_mock_with_exception = Future()
-    future_mock_with_exception.set_exception(GLib.GError)
-
-    ks_handler_mock = Mock()
-    ks_handler_mock.remove_full_killswitch_connection.return_value = future_mock_with_exception
-
-    nm_killswitch = NMKillSwitch(ks_handler_mock)
-    future = nm_killswitch.disable()
-
-    with pytest.raises(KillSwitchException):
-        future.result()
-
-
-def test_disable_kilswitch_raises_exception_when_full_killswitch_connection_can_not_be_removed():
-    future_mock_with_exception = Future()
-    future_mock_with_exception.set_exception(GLib.GError)
-
-    future_mock_with_success = Future()
-    future_mock_with_success.set_result(None)
-
-    ks_handler_mock = Mock()
-    ks_handler_mock.remove_full_killswitch_connection.return_value = future_mock_with_success
-    ks_handler_mock.remove_routed_killswitch_connection.return_value = future_mock_with_exception
-
-    nm_killswitch = NMKillSwitch(ks_handler_mock)
-    future = nm_killswitch.disable()
-
-    with pytest.raises(KillSwitchException):
-        future.result()
-
-
-def test_sucessfully_enable_ipv6_leak_protection():
-    future_mock = Future()
-    future_mock.set_result(None)
-    ks_handler_mock = Mock()
-    ks_handler_mock.add_ipv6_leak_protection.return_value = future_mock
-    is_ipv6_leak_protection_connection_active_mock = PropertyMock(side_effect=[False])
-    type(ks_handler_mock).is_ipv6_leak_protection_connection_active = is_ipv6_leak_protection_connection_active_mock
-
-    nm_killswitch = NMKillSwitch(ks_handler_mock)
-    future = nm_killswitch.enable_ipv6_leak_protection()
-    future.result()
-
-    ks_handler_mock.add_ipv6_leak_protection.assert_called_once()
-
-
-def test_enable_ipv6_leak_protection_raises_exception_when_ipv6_connection_is_not_created():
-    future_mock = Future()
-    future_mock.set_exception(GLib.GError)
-    ks_handler_mock = Mock()
-    ks_handler_mock.add_ipv6_leak_protection.return_value = future_mock
-    is_killswitch_connection_active_mock = PropertyMock(side_effect=[False])
-    type(ks_handler_mock).is_ipv6_leak_protection_connection_active = is_killswitch_connection_active_mock
-
-    nm_killswitch = NMKillSwitch(ks_handler_mock)
-    future = nm_killswitch.enable_ipv6_leak_protection()
-
-    with pytest.raises(KillSwitchException):
-        future.result()
-
-
-def test_sucessfully_disable_ipv6_leak_protection():
-    future_mock = Future()
-    future_mock.set_result(None)
-    ks_handler_mock = Mock()
-    ks_handler_mock.remove_ipv6_leak_protection.return_value = future_mock
-    is_ipv6_leak_protection_connection_active_mock = PropertyMock(side_effect=[True])
-    type(ks_handler_mock).is_ipv6_leak_protection_connection_active = is_ipv6_leak_protection_connection_active_mock
-
-    nm_killswitch = NMKillSwitch(ks_handler_mock)
-    future = nm_killswitch.disable_ipv6_leak_protection()
-    future.result()
-
-    ks_handler_mock.remove_ipv6_leak_protection.assert_called_once()
-
-
-def test_disable_ipv6_leak_protection_raises_exception_when_ipv6_connection_can_not_be_removed():
-    future_mock = Future()
-    future_mock.set_exception(GLib.GError)
-    ks_handler_mock = Mock()
-    ks_handler_mock.remove_ipv6_leak_protection.return_value = future_mock
-    is_killswitch_connection_active_mock = PropertyMock(side_effect=[True])
-    type(ks_handler_mock).is_ipv6_leak_protection_connection_active = is_killswitch_connection_active_mock
-
-    nm_killswitch = NMKillSwitch(ks_handler_mock)
-    future = nm_killswitch.disable_ipv6_leak_protection()
-
-    with pytest.raises(KillSwitchException):
-        future.result()
