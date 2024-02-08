@@ -88,7 +88,7 @@ class KillSwitchConnectionHandler:
         """Returns if routed kill switch is active or not."""
         return bool(self.nm_client.get_active_connection(IPV4_ROUTED_HUMAN_READABLE_ID))
 
-    async def add_full_killswitch_connection(self):
+    async def add_full_killswitch_connection(self, permanent: bool):
         """Adds full kill switch connection to Network Manager. This connection blocks all
         outgoing traffic when not connected to VPN, with the exception of torrent client which will
         require to be bonded to the VPN interface.."""
@@ -120,10 +120,12 @@ class KillSwitchConnectionHandler:
             ipv6_settings=None,
         )
         logger.debug("Adding full kill switch...")
-        await _wrap_future(self.nm_client.add_connection_async(killswitch.connection))
+        await _wrap_future(
+            self.nm_client.add_connection_async(killswitch.connection, save_to_disk=permanent)
+        )
         logger.debug("Full kill switch added.")
 
-    async def add_routed_killswitch_connection(self, server_ip: str):
+    async def add_routed_killswitch_connection(self, server_ip: str, permanent: bool):
         """Add routed kill switch connection to Network Manager.
 
         This connection has a "hole punched in it", to allow only the server IP to
@@ -155,10 +157,12 @@ class KillSwitchConnectionHandler:
             ipv6_settings=None,
         )
         logger.debug("Adding routed kill switch...")
-        await _wrap_future(self.nm_client.add_connection_async(killswitch.connection))
+        await _wrap_future(
+            self.nm_client.add_connection_async(killswitch.connection, save_to_disk=permanent)
+        )
         logger.debug("Routed kill switch added.")
 
-    async def add_ipv6_leak_protection(self):
+    async def add_ipv6_leak_protection(self, permanent):
         """Adds IPv6 kill switch to NetworkManager. This connection is mainly
         to prevent IPv6 leaks while using IPv4."""
         await self._ensure_connectivity_check_is_disabled()
@@ -190,7 +194,9 @@ class KillSwitchConnectionHandler:
         )
 
         logger.debug("Adding IPv6 leak protection...")
-        await _wrap_future(self.nm_client.add_connection_async(killswitch.connection))
+        await _wrap_future(
+            self.nm_client.add_connection_async(killswitch.connection, save_to_disk=permanent)
+        )
         logger.debug("IP6 leak protection added.")
 
     async def remove_full_killswitch_connection(self):

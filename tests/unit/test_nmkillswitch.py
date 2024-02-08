@@ -38,7 +38,7 @@ async def test_enable_without_vpn_server_adds_full_ks_and_removes_routed_ks():
     await nm_killswitch.enable()
 
     assert ks_handler_mock.method_calls == [
-        call.add_full_killswitch_connection(),
+        call.add_full_killswitch_connection(False),
         call.remove_routed_killswitch_connection(),
     ]
 
@@ -58,9 +58,9 @@ async def test_enable_with_vpn_server(vpn_server):
     await nm_killswitch.enable(vpn_server)
 
     assert ks_handler_mock.method_calls == [
-        call.add_full_killswitch_connection(),
+        call.add_full_killswitch_connection(False),
         call.remove_routed_killswitch_connection(),
-        call.add_routed_killswitch_connection(vpn_server.server_ip),
+        call.add_routed_killswitch_connection(vpn_server.server_ip, False),
         call.remove_full_killswitch_connection()
     ]
 
@@ -73,8 +73,8 @@ async def test_disable_killswitch_removes_full_and_routed_ks():
     await nm_killswitch.disable()
 
     assert ks_handler_mock.method_calls == [
-        call.remove_full_killswitch_connection,
-        call.remove_routed_killswitch_connection
+        call.remove_full_killswitch_connection(),
+        call.remove_routed_killswitch_connection()
     ]
 
 
@@ -86,7 +86,7 @@ async def test_enable_ipv6_leak_protection_adds_ipv6_ks():
     await nm_killswitch.enable_ipv6_leak_protection()
 
     assert ks_handler_mock.method_calls == [
-        call.add_ipv6_leak_protection
+        call.add_ipv6_leak_protection(False)
     ]
 
 
@@ -98,6 +98,6 @@ async def test_disable_ipv6_leak_protection_removes_ipv6_ks():
     await nm_killswitch.disable_ipv6_leak_protection()
 
     assert ks_handler_mock.method_calls == [
-        call.remove_ipv6_leak_protection
+        call.remove_ipv6_leak_protection()
     ]
 

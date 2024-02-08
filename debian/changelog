@@ -1,3 +1,9 @@
+proton-vpn-killswitch-network-manager (0.4.0) unstable; urgency=medium
+
+  * Add permanent kill switch
+
+ -- Josep Llaneras <josep.llaneras@proton.ch>  Thu, 08 Feb 2024 12:21:35 +0100
+
 proton-vpn-killswitch-network-manager (0.3.0) unstable; urgency=medium
 
   * Wait for target interface state when adding/removing NM connections

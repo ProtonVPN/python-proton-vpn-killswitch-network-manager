@@ -19,12 +19,15 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 """
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from proton.vpn.killswitch.interface import KillSwitch
 from proton.vpn.killswitch.backend.linux.networkmanager.killswitch_connection_handler\
     import KillSwitchConnectionHandler
 from proton.vpn import logging
+
+if TYPE_CHECKING:
+    from proton.vpn.connection import VPNServer
 
 
 logger = logging.getLogger(__name__)
@@ -47,11 +50,13 @@ class NMKillSwitch(KillSwitch):
         self._ks_handler = ks_handler or KillSwitchConnectionHandler()
         super().__init__()
 
-    async def enable(self, vpn_server: Optional["VPNServer"] = None):  # noqa
+    async def enable(
+            self, vpn_server: Optional["VPNServer"] = None, permanent: bool = False
+    ):  # noqa
         """Enables general kill switch."""
         # The full KS blocks all traffic except the one going to an already
         # existing VPN interface.
-        await self._ks_handler.add_full_killswitch_connection()
+        await self._ks_handler.add_full_killswitch_connection(permanent)
 
         # If the routed KS is already enabled then it needs to be removed.
         # There is no way to just update it with the new VPN server IP.
@@ -61,7 +66,7 @@ class NMKillSwitch(KillSwitch):
             return
 
         # The routed KS blocks all traffic except the one going to the specified VPN server IP.
-        await self._ks_handler.add_routed_killswitch_connection(vpn_server.server_ip)
+        await self._ks_handler.add_routed_killswitch_connection(vpn_server.server_ip, permanent)
 
         # At this point the full KS is removed to allow establishing the new VPN connection
         # to the specified server IP.
@@ -72,9 +77,9 @@ class NMKillSwitch(KillSwitch):
         await self._ks_handler.remove_full_killswitch_connection()
         await self._ks_handler.remove_routed_killswitch_connection()
 
-    async def enable_ipv6_leak_protection(self):
+    async def enable_ipv6_leak_protection(self, permanent: bool = False):
         """Enables IPv6 kill switch."""
-        await self._ks_handler.add_ipv6_leak_protection()
+        await self._ks_handler.add_ipv6_leak_protection(permanent)
 
     async def disable_ipv6_leak_protection(self):
         """Disables IPv6 kill switch."""
