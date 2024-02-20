@@ -49,7 +49,7 @@ async def test_enable_with_vpn_server(vpn_server):
     When enabling the KS specifying a vpn server to connect to we expect:
      1) The full KS is added first, to block all network traffic until the routed KS is set up.
      2) The routed KS is removed (if found).
-     3) A new routed KS whitelisting the VPN server IP is added.
+     2) A new routed KS whitelisting the VPN server IP is added.
      4) The full KS is removed to let the routed KS take over.
     """
     ks_handler_mock = AsyncMock()
@@ -86,7 +86,7 @@ async def test_enable_ipv6_leak_protection_adds_ipv6_ks():
     await nm_killswitch.enable_ipv6_leak_protection()
 
     assert ks_handler_mock.method_calls == [
-        call.add_ipv6_leak_protection(False)
+        call.add_ipv6_leak_protection()
     ]
 
 

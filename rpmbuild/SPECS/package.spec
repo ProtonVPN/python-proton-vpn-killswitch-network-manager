@@ -1,5 +1,5 @@
 %define unmangled_name proton-vpn-killswitch-network-manager
-%define version 0.4.0
+%define version 0.4.1
 %define release 1
 
 Prefix: %{_prefix}
@@ -50,6 +50,9 @@ python3 setup.py install --single-version-externally-managed -O1 --root=$RPM_BUI
 %defattr(-,root,root)
 
 %changelog
+* Tue Feb 20 2024 Josep Llaneras <josep.llaneras@proton.ch> 0.4.1
+- Fix switching between non-permanent and permanent KS
+
 * Thu Feb 08 2024 Josep Llaneras <josep.llaneras@proton.ch> 0.4.0
 - Add permanent kill switch
 

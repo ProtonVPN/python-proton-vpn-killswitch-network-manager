@@ -79,7 +79,7 @@ class NMKillSwitch(KillSwitch):
 
     async def enable_ipv6_leak_protection(self, permanent: bool = False):
         """Enables IPv6 kill switch."""
-        await self._ks_handler.add_ipv6_leak_protection(permanent)
+        await self._ks_handler.add_ipv6_leak_protection()
 
     async def disable_ipv6_leak_protection(self):
         """Disables IPv6 kill switch."""
