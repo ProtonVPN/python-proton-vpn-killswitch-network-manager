@@ -34,9 +34,9 @@ logger = logging.getLogger(__name__)
 
 def _get_connection_id(permanent: bool, ipv6: bool = False, routed: bool = False):
     if ipv6:
-        return f"pvpn-ks-ipv6{'-perm' if permanent else ''}"
+        return f"pvpn-killswitch-ipv6{'-perm' if permanent else ''}"
 
-    return f"pvpn-ks{'-routed' if routed else ''}{'-perm' if permanent else ''}"
+    return f"pvpn{'-routed' if routed else ''}-killswitch{'-perm' if permanent else ''}"
 
 
 def _get_interface_name(permanent: bool, ipv6: bool = False, routed: bool = False):

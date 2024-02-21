@@ -1,3 +1,9 @@
+proton-vpn-killswitch-network-manager (0.4.2) unstable; urgency=medium
+
+  * Keep same old kill switch connection ids
+
+ -- Josep Llaneras <josep.llaneras@proton.ch>  Wed, 21 Feb 2024 16:29:38 +0100
+
 proton-vpn-killswitch-network-manager (0.4.1) unstable; urgency=medium
 
   * Fix switching between non-permanent and permanent KS
