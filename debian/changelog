@@ -1,3 +1,9 @@
+proton-vpn-killswitch-network-manager (0.4.3) unstable; urgency=medium
+
+  * Fix crash on older distros when disabling connectivity checking
+
+ -- Josep Llaneras <josep.llaneras@proton.ch>  Wed, 06 Mar 2024 10:27:51 +0100
+
 proton-vpn-killswitch-network-manager (0.4.2) unstable; urgency=medium
 
   * Keep same old kill switch connection ids

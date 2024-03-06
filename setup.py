@@ -4,7 +4,7 @@ from setuptools import setup, find_namespace_packages
 
 setup(
     name="proton-vpn-killswitch-network-manager",
-    version="0.4.2",
+    version="0.4.3",
     description="Proton Technologies VPN connector for linux",
     author="Proton Technologies",
     author_email="contact@protonmail.com",
@@ -12,7 +12,7 @@ setup(
     packages=find_namespace_packages(include=['proton.vpn.killswitch.backend.linux.networkmanager']),
     include_package_data=True,
     python_requires=">=3.8",
-    install_requires=["proton-vpn-killswitch", "proton-vpn-logger", "pygobject", "pycairo"],
+    install_requires=["proton-vpn-killswitch", "proton-vpn-logger", "pygobject", "pycairo", "packaging"],
     extras_require={
         "development": ["wheel", "pytest", "pytest-cov", "pytest-asyncio", "flake8", "pylint"]
     },

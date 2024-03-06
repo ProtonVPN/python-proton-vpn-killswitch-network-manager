@@ -23,6 +23,8 @@ from concurrent.futures import Future
 from threading import Thread, Lock
 from typing import Optional
 
+from packaging.version import Version
+
 import gi
 gi.require_version("NM", "1.0")
 from gi.repository import NM, GLib, Gio, GObject  # pylint: disable=C0413 # noqa: E402
@@ -279,6 +281,13 @@ class NMClient:
         https://developer-old.gnome.org/NetworkManager/stable/NetworkManager.conf.html
         (see under `connectivity section`)
         """
+        if Version(self._nm_client.get_version()) < Version("1.24.0"):
+            # NM.Client.connectivity_check_set_enabled is deprecated since version 1.22
+            # but the replacement method is only available in version 1.24.
+            return self._run_on_glib_loop_thread(
+                self._nm_client.connectivity_check_set_enabled, False
+            )
+
         return self._dbus_set_property(
             object_path="/org/freedesktop/NetworkManager",
             interface_name="org.freedesktop.NetworkManager",

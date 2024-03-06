@@ -1,5 +1,5 @@
 %define unmangled_name proton-vpn-killswitch-network-manager
-%define version 0.4.2
+%define version 0.4.3
 %define release 1
 
 Prefix: %{_prefix}
@@ -22,11 +22,13 @@ BuildRequires: python3-proton-vpn-logger
 BuildRequires: python3-setuptools
 BuildRequires: python3-gobject
 BuildRequires: NetworkManager
+BuildRequires: python3-packaging
 
 Requires: python3-proton-vpn-killswitch
 Requires: python3-proton-vpn-logger
 Requires: python3-gobject
 Requires: NetworkManager
+Requires: python3-packaging
 
 %{?python_disable_dependency_generator}
 
@@ -50,6 +52,9 @@ python3 setup.py install --single-version-externally-managed -O1 --root=$RPM_BUI
 %defattr(-,root,root)
 
 %changelog
+* Wed Mar 06 2024 Josep Llaneras <josep.llaneras@proton.ch> 0.4.3
+- Fix crash on older distros when disabling connectivity checking
+
 * Wed Feb 21 2024 Josep Llaneras <josep.llaneras@proton.ch> 0.4.2
 - Keep same old kill switch connection ids
 
