@@ -1,5 +1,5 @@
 %define unmangled_name proton-vpn-killswitch-network-manager
-%define version 0.4.3
+%define version 0.4.4
 %define release 1
 
 Prefix: %{_prefix}
@@ -52,6 +52,9 @@ python3 setup.py install --single-version-externally-managed -O1 --root=$RPM_BUI
 %defattr(-,root,root)
 
 %changelog
+* Tue Apr 30 2024 Josep Llaneras <josep.llaneras@proton.ch> 0.4.4
+- Fix random crashes when enabling/disabling the kill switch
+
 * Wed Mar 06 2024 Josep Llaneras <josep.llaneras@proton.ch> 0.4.3
 - Fix crash on older distros when disabling connectivity checking
 

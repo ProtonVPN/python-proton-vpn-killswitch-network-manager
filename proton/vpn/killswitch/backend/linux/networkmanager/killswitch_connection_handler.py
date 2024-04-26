@@ -32,11 +32,11 @@ from proton.vpn.killswitch.backend.linux.networkmanager.killswitch_connection im
 logger = logging.getLogger(__name__)
 
 
-def _get_connection_id(permanent: bool, ipv6: bool = False, routed: bool = False):
+def _get_connection_id(prefix: str, permanent: bool, ipv6: bool = False, routed: bool = False):
     if ipv6:
-        return f"pvpn-killswitch-ipv6{'-perm' if permanent else ''}"
+        return f"{prefix}-killswitch-ipv6{'-perm' if permanent else ''}"
 
-    return f"pvpn{'-routed' if routed else ''}-killswitch{'-perm' if permanent else ''}"
+    return f"{prefix}{'-routed' if routed else ''}-killswitch{'-perm' if permanent else ''}"
 
 
 def _get_interface_name(permanent: bool, ipv6: bool = False, routed: bool = False):
@@ -57,8 +57,9 @@ async def _wrap_future(future: concurrent.futures.Future, timeout=5):
 class KillSwitchConnectionHandler:
     """Kill switch connection management."""
 
-    def __init__(self, nm_client: NMClient = None):
+    def __init__(self, nm_client: NMClient = None, connection_prefix: str = None):
         self._nm_client = nm_client
+        self._connection_prefix = connection_prefix or "pvpn"
         self._ipv6_ks_settings = KillSwitchIPConfig(
             addresses=["fdeb:446c:912d:08da::/64"],
             dns=["::1"],
@@ -80,7 +81,7 @@ class KillSwitchConnectionHandler:
 
         return KillSwitchIPConfig(
             addresses=["100.85.0.1/24"],
-            dns=["0.0.0.0"],
+            dns=["0.0.0.0"],  # nosec hardcoded_bind_all_interfaces
             dns_priority=-1400,
             gateway=gateway,
             ignore_auto_dns=True,
@@ -112,7 +113,7 @@ class KillSwitchConnectionHandler:
         require to be bonded to the VPN interface.."""
         await self._ensure_connectivity_check_is_disabled()
 
-        connection_id = _get_connection_id(permanent)
+        connection_id = _get_connection_id(self._connection_prefix, permanent)
         connection = self.nm_client.get_active_connection(
             conn_id=connection_id
         )
@@ -135,9 +136,10 @@ class KillSwitchConnectionHandler:
         await _wrap_future(
             self.nm_client.add_connection_async(kill_switch.connection, save_to_disk=permanent)
         )
+
         logger.debug(f"{'Permanent' if permanent else 'Non-permanent'} kill switch added.")
         await self._remove_connection(
-            connection_id=_get_connection_id(permanent=not permanent)
+            connection_id=_get_connection_id(self._connection_prefix, permanent=not permanent)
         )
         logger.debug(f"{'Non-permanent' if permanent else 'Permanent'} kill switch removed.")
 
@@ -152,7 +154,7 @@ class KillSwitchConnectionHandler:
         await self._ensure_connectivity_check_is_disabled()
 
         general_config = KillSwitchGeneralConfig(
-            human_readable_id=_get_connection_id(permanent, routed=True),
+            human_readable_id=_get_connection_id(self._connection_prefix, permanent, routed=True),
             interface_name=_get_interface_name(permanent, routed=True)
         )
         kill_switch = KillSwitchConnection(
@@ -170,7 +172,9 @@ class KillSwitchConnectionHandler:
         to prevent IPv6 leaks while using IPv4."""
         await self._ensure_connectivity_check_is_disabled()
 
-        connection_id = _get_connection_id(permanent=False, ipv6=True)
+        connection_id = _get_connection_id(
+            self._connection_prefix, permanent=False, ipv6=True
+        )
         connection = self.nm_client.get_active_connection(
             conn_id=connection_id)
 
@@ -198,21 +202,31 @@ class KillSwitchConnectionHandler:
     async def remove_full_killswitch_connection(self):
         """Removes full kill switch connection."""
         logger.debug("Removing full kill switch...")
-        await self._remove_connection(_get_connection_id(permanent=True))
-        await self._remove_connection(_get_connection_id(permanent=False))
+        await self._remove_connection(
+            _get_connection_id(self._connection_prefix, permanent=True)
+        )
+        await self._remove_connection(
+            _get_connection_id(self._connection_prefix, permanent=False)
+        )
         logger.debug("Full kill switch removed.")
 
     async def remove_routed_killswitch_connection(self):
         """Removes routed kill switch connection."""
         logger.debug("Removing routed kill switch...")
-        await self._remove_connection(_get_connection_id(permanent=True, routed=True))
-        await self._remove_connection(_get_connection_id(permanent=False, routed=True))
+        await self._remove_connection(
+            _get_connection_id(self._connection_prefix, permanent=True, routed=True)
+        )
+        await self._remove_connection(
+            _get_connection_id(self._connection_prefix, permanent=False, routed=True)
+        )
         logger.debug("Routed kill switch removed.")
 
     async def remove_ipv6_leak_protection(self):
         """Removes IPv6 kill switch connection."""
         logger.debug("Removing IPv6 leak protection...")
-        await self._remove_connection(_get_connection_id(permanent=False, ipv6=True))
+        await self._remove_connection(
+            _get_connection_id(self._connection_prefix, permanent=False, ipv6=True)
+        )
         logger.debug("IP6 leak protection removed.")
 
     async def _remove_connection(self, connection_id: str):

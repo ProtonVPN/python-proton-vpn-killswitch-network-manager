@@ -1,3 +1,9 @@
+proton-vpn-killswitch-network-manager (0.4.4) unstable; urgency=medium
+
+  * Fix random crashes when enabling/disabling the kill switch
+
+ -- Josep Llaneras <josep.llaneras@proton.ch>  Tue, 30 Apr 2024 15:24:53 +0200
+
 proton-vpn-killswitch-network-manager (0.4.3) unstable; urgency=medium
 
   * Fix crash on older distros when disabling connectivity checking

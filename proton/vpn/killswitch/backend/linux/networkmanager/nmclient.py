@@ -106,7 +106,8 @@ class NMClient:
         For more info:
         https://developer.gnome.org/documentation/tutorials/main-contexts.html#checking-threading
         """
-        assert cls._main_context.is_owner()
+        if not cls._main_context.is_owner():
+            raise RuntimeError("Code being run outside GLib's main loop.")
 
     @classmethod
     def _run_on_glib_loop_thread(cls, function, *args, **kwargs) -> Future:
@@ -137,28 +138,32 @@ class NMClient:
         """
         future_conn_activated = _create_future()
 
-        def _on_connection_added(nm_client, res, _user_data):
+        def _on_interface_state_changed(_device, new_state, _old_state, _reason):
+            """
+            Monitors kill switch interface state changes and resolves
+            the future as soon as the interface reaches the activated state
+            """
+            logger.debug(
+                f"{connection.get_interface_name()} interface state changed "
+                f"to {NM.DeviceState(new_state).value_name}"
+            )
             if (
-                    not nm_client or not res or
-                    not (remote_connection := nm_client.add_connection_finish(res))
+                    NM.DeviceState(new_state) == NM.DeviceState.ACTIVATED
+                    and not future_conn_activated.done()
             ):
-                future_conn_activated.set_exception(
-                    RuntimeError(f"Error setting adding KS connection: {nm_client=}, {res=}")
-                )
+                future_conn_activated.set_result(None)
+
+        def _on_interface_added(_nm_client, device):
+            """
+            Monitors interface creation. As soon as the kill switch interface
+            is created it sets up the call back to monitor interface state changes.
+            """
+            logger.debug(
+                f"{device.get_iface()} interface added in state {device.get_state().value_name}"
+            )
+            if not device.get_iface() == connection.get_interface_name():
                 return
 
-            def _on_interface_state_changed(_device, new_state, _old_state, _reason):
-                logger.debug(
-                    f"{remote_connection.get_interface_name()} interface state changed "
-                    f"to {NM.DeviceState(new_state).value_name}"
-                )
-                if (
-                        NM.DeviceState(new_state) == NM.DeviceState.ACTIVATED
-                        and not future_conn_activated.done()
-                ):
-                    future_conn_activated.set_result(remote_connection)
-
-            device = self._nm_client.get_device_by_iface(remote_connection.get_interface_name())
             handler_id = device.connect("state-changed", _on_interface_state_changed)
             future_conn_activated.add_done_callback(
                 lambda f: self._run_on_glib_loop_thread(
@@ -166,11 +171,29 @@ class NMClient:
                 ).result()
             )
 
-            # The callback is manually called here because sometimes is never called. I assume that
-            # when we connect to the state-changes signal the interface has already been activated.
-            _on_interface_state_changed(device, device.get_state().real, None, None)
+        def _on_connection_added(nm_client, res, _user_data):
+            try:
+                # Make sure exceptions creating the connection are passed to the future.
+                nm_client.add_connection_finish(res)
+            except Exception as exc:  # pylint: disable=broad-except
+                future_conn_activated.set_exception(
+                    RuntimeError(
+                        f"Error setting adding KS connection: {nm_client=}, {res=}"
+                    ).with_traceback(exc.__traceback__)
+                )
+                return
 
         def _add_connection_async():
+            # Set up interface connection monitoring, which resolves the future
+            # once the kill switch is active.
+            handler_id = self._nm_client.connect("device-added", _on_interface_added)
+            future_conn_activated.add_done_callback(
+                lambda f: self._run_on_glib_loop_thread(
+                    GObject.signal_handler_disconnect, self._nm_client, handler_id
+                ).result()
+            )
+
+            # Add kill switch connection asynchronously.
             self._nm_client.add_connection_async(
                 connection=connection,
                 save_to_disk=save_to_disk,
@@ -195,29 +218,27 @@ class NMClient:
         future_interface_removed = _create_future()
 
         def _on_connection_removed(connection, result, _user_data):
-            if not connection or not result or not connection.delete_finish(result):
+            try:
+                connection.delete_finish(result)
+            except Exception as exc:  # pylint: disable=broad-except
                 future_interface_removed.set_exception(
-                    RuntimeError(f"Error removing KS connection: {connection=}, {result=}")
+                    RuntimeError(
+                        f"Error removing KS connection: {connection=}, {result=}"
+                    ).with_traceback(exc.__traceback__)
                 )
-                return
 
-        def _on_interface_state_changed(device, new_state, _old_state, _reason):
+        def _on_interface_removed(_nm_client, device):
             logger.debug(
-                f"{device.get_iface()} interface state changed to "
-                f"{NM.DeviceState(new_state).value_name}"
+                f"{device.get_iface()} was removed."
             )
-            if (
-                    NM.DeviceState(new_state) == NM.DeviceState.DISCONNECTED
-                    and not future_interface_removed.done()
-            ):
+            if device.get_iface() == connection.get_interface_name():
                 future_interface_removed.set_result(None)
 
         def _remove_connection_async():
-            device = self._nm_client.get_device_by_iface(connection.get_interface_name())
-            handler_id = device.connect("state-changed", _on_interface_state_changed)
+            handler_id = self._nm_client.connect("device-removed", _on_interface_removed)
             future_interface_removed.add_done_callback(
                 lambda f: self._run_on_glib_loop_thread(
-                    GObject.signal_handler_disconnect, device, handler_id
+                    GObject.signal_handler_disconnect, self._nm_client, handler_id
                 ).result()
             )
 
