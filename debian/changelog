@@ -1,3 +1,9 @@
+proton-vpn-killswitch-network-manager (0.4.5) unstable; urgency=medium
+
+  * Change kill switch connection IPv4 config from manual to auto.
+
+ -- Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch>  Thu, 13 Jun 2024 17:00:00 +0200
+
 proton-vpn-killswitch-network-manager (0.4.4) unstable; urgency=medium
 
   * Fix random crashes when enabling/disabling the kill switch

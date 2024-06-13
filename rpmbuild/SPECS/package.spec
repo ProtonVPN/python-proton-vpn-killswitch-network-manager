@@ -1,5 +1,5 @@
 %define unmangled_name proton-vpn-killswitch-network-manager
-%define version 0.4.4
+%define version 0.4.5
 %define release 1
 
 Prefix: %{_prefix}
@@ -52,6 +52,9 @@ python3 setup.py install --single-version-externally-managed -O1 --root=$RPM_BUI
 %defattr(-,root,root)
 
 %changelog
+* Thu Jun 13 2024 Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch> 0.4.5
+- Change kill switch connection IPv4 config from manual to auto.
+
 * Tue Apr 30 2024 Josep Llaneras <josep.llaneras@proton.ch> 0.4.4
 - Fix random crashes when enabling/disabling the kill switch
 

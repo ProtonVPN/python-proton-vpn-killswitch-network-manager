@@ -4,9 +4,9 @@ from setuptools import setup, find_namespace_packages
 
 setup(
     name="proton-vpn-killswitch-network-manager",
-    version="0.4.4",
+    version="0.4.5",
     description="Proton Technologies VPN connector for linux",
-    author="Proton Technologies",
+    author="Proton AG",
     author_email="contact@protonmail.com",
     url="https://github.com/ProtonVPN/pyhon-protonvpn-network-manager",
     packages=find_namespace_packages(include=['proton.vpn.killswitch.backend.linux.networkmanager']),

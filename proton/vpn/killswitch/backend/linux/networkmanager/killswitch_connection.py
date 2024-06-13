@@ -28,6 +28,9 @@ gi.require_version("NM", "1.0")
 from gi.repository import NM, GLib  # pylint: disable=C0413 # noqa: E402
 
 
+DEFAULT_METRIC = -1
+
+
 @dataclass
 class KillSwitchGeneralConfig:  # pylint: disable=missing-class-docstring
     human_readable_id: str
@@ -79,7 +82,7 @@ class KillSwitchConnection:  # pylint: disable=too-few-public-methods
             self._general_settings.interface_name
         )
         s_con.set_property(NM.SETTING_CONNECTION_UUID, str(uuid.uuid4()))
-        s_con.set_property(NM.SETTING_CONNECTION_TYPE, "dummy")
+        s_con.set_property(NM.SETTING_CONNECTION_TYPE, NM.SETTING_DUMMY_SETTING_NAME)
 
         s_dummy = NM.SettingDummy.new()
 
@@ -106,11 +109,12 @@ class KillSwitchConnection:  # pylint: disable=too-few-public-methods
         s_ip4 = NM.SettingIP4Config.new()
 
         if self._ipv4_settings is None:
-            s_ip4.set_property(NM.SETTING_IP_CONFIG_METHOD, "disabled")
+            s_ip4.set_property(NM.SETTING_IP_CONFIG_METHOD, NM.SETTING_IP4_CONFIG_METHOD_DISABLED)
             return s_ip4
 
-        # Inform NM that the IP configuration is manual
-        s_ip4.set_property(NM.SETTING_IP_CONFIG_METHOD, "manual")
+        # NM.SETTING_IP4_CONFIG_METHOD_MANUAL stopped working on Ubuntu 24.04.
+        # The route metric was not taken into account.
+        s_ip4.set_property(NM.SETTING_IP_CONFIG_METHOD, NM.SETTING_IP4_CONFIG_METHOD_AUTO)
 
         # Add addresses
         for address in self._ipv4_settings.addresses:
@@ -129,7 +133,7 @@ class KillSwitchConnection:  # pylint: disable=too-few-public-methods
             s_ip4.add_route(
                 NM.IPRoute.new(
                     family=GLib.SYSDEF_AF_INET, dest=ipv4, prefix=int(prefix),
-                    next_hop=None, metric=-1
+                    next_hop=None, metric=DEFAULT_METRIC
                 )
             )
 
@@ -153,11 +157,11 @@ class KillSwitchConnection:  # pylint: disable=too-few-public-methods
         s_ip6 = NM.SettingIP6Config.new()
 
         if self._ipv6_settings is None:
-            s_ip6.set_property(NM.SETTING_IP_CONFIG_METHOD, "disabled")
+            s_ip6.set_property(NM.SETTING_IP_CONFIG_METHOD, NM.SETTING_IP6_CONFIG_METHOD_DISABLED)
             return s_ip6
 
         # inform NM that the IP configuration is manual
-        s_ip6.set_property(NM.SETTING_IP_CONFIG_METHOD, "manual")
+        s_ip6.set_property(NM.SETTING_IP_CONFIG_METHOD, NM.SETTING_IP6_CONFIG_METHOD_MANUAL)
 
         # Add addresses
         for address in self._ipv6_settings.addresses:
