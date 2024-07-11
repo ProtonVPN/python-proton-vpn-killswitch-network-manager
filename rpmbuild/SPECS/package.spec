@@ -1,5 +1,5 @@
 %define unmangled_name proton-vpn-killswitch-network-manager
-%define version 0.4.5
+%define version 0.5.0
 %define release 1
 
 Prefix: %{_prefix}
@@ -17,14 +17,14 @@ Source0: %{unmangled_name}-%{version}.tar.gz
 BuildArch: noarch
 BuildRoot: %{_tmppath}/%{unmangled_name}-%{version}-%{release}-buildroot
 
-BuildRequires: python3-proton-vpn-killswitch
+BuildRequires: python3-proton-vpn-api-core
 BuildRequires: python3-proton-vpn-logger
 BuildRequires: python3-setuptools
 BuildRequires: python3-gobject
 BuildRequires: NetworkManager
 BuildRequires: python3-packaging
 
-Requires: python3-proton-vpn-killswitch
+Requires: python3-proton-vpn-api-core
 Requires: python3-proton-vpn-logger
 Requires: python3-gobject
 Requires: NetworkManager
@@ -52,6 +52,9 @@ python3 setup.py install --single-version-externally-managed -O1 --root=$RPM_BUI
 %defattr(-,root,root)
 
 %changelog
+* Thu Jul 11 2024 Josep Llaneras <josep.llaneras@proton.ch> 0.5.0
+- Add proton-vpn-api-core dependency
+
 * Thu Jun 13 2024 Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch> 0.4.5
 - Change kill switch connection IPv4 config from manual to auto.
 

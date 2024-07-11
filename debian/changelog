@@ -1,3 +1,9 @@
+proton-vpn-killswitch-network-manager (0.5.0) unstable; urgency=medium
+
+  * Add proton-vpn-api-core dependency
+
+ -- Josep Llaneras <josep.llaneras@proton.ch>  Thu, 11 Jul 2024 09:32:18 +0200
+
 proton-vpn-killswitch-network-manager (0.4.5) unstable; urgency=medium
 
   * Change kill switch connection IPv4 config from manual to auto.
