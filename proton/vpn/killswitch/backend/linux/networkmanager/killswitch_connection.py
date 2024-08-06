@@ -23,9 +23,9 @@ along with ProtonVPN.  If not, see <https://www.gnu.org/licenses/>.
 from dataclasses import dataclass, field
 import uuid
 
-import gi
+import gi  # pylint: disable=C0411
 gi.require_version("NM", "1.0")
-from gi.repository import NM, GLib  # pylint: disable=C0413 # noqa: E402
+from gi.repository import NM, GLib  # noqa: E402 pylint: disable=C0413
 
 
 DEFAULT_METRIC = -1
