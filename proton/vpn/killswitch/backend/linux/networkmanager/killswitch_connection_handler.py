@@ -46,7 +46,7 @@ def _get_interface_name(permanent: bool, ipv6: bool = False, routed: bool = Fals
     return f"{'pvpnrouteintrf' if routed else 'pvpnksintrf'}{'1' if permanent else '0'}"
 
 
-async def _wrap_future(future: concurrent.futures.Future, timeout=5):
+async def _wrap_future(future: concurrent.futures.Future, timeout=300):
     """Wraps a concurrent.future.Future object in an asyncio.Future object."""
     return await asyncio.wait_for(
         asyncio.wrap_future(future, loop=asyncio.get_running_loop()),
