@@ -109,7 +109,7 @@ class NMKillSwitch(KillSwitch):
                 capture_output=True,
                 check=True, shell=False
             )  # nosec B603:subprocess_without_shell_equals_true
-        except subprocess.CalledProcessError:
+        except (FileNotFoundError, subprocess.CalledProcessError):
             # if the apt command or the libnetplan1 package are not available then it's fine.
             return True
 
