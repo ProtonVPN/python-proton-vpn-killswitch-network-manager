@@ -31,13 +31,11 @@ def is_ipv6_disabled() -> bool:
     try:
         with open(filepath, "r", encoding="utf-8") as ipv6_disabled_file:
             if ipv6_disabled_file.read().strip() != "0":
-                # Since we have issues in Ubuntu 24.04 where
-                # libnetplan1 is installed and ipv6 is disabled we skip it entirely.
-                return False
+                return True
     except FileNotFoundError:
         # If flatpak then we don't have access to the file and assume
         # IPv6 is enabled.
         logger.error("Unable to figure if IPv6 is enabled or disabled, probably flatpak install.")
         return False
 
-    return True
+    return False

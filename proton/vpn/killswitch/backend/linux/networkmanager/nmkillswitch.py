@@ -95,7 +95,7 @@ class NMKillSwitch(KillSwitch):
     @staticmethod
     def _validate():
         try:
-            return KillSwitchConnectionHandler().is_network_manager_running
+            KillSwitchConnectionHandler().is_network_manager_running
         except (ModuleNotFoundError, ImportError):
             logger.error("NetworkManager is not running.")
             return False
