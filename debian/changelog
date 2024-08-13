@@ -1,3 +1,9 @@
+proton-vpn-killswitch-network-manager (0.5.4) unstable; urgency=medium
+
+  * Only log if kill switch backend is incompatible.
+
+ -- Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch>  Tue, 13 Aug 2024 12:00:00 +0200
+
 proton-vpn-killswitch-network-manager (0.5.3) unstable; urgency=medium
 
   * Invert ipv6 detection logic.

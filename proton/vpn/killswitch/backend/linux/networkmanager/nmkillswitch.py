@@ -94,6 +94,8 @@ class NMKillSwitch(KillSwitch):
 
     @staticmethod
     def _validate():
+        is_libnetplan1_installed = False
+
         try:
             KillSwitchConnectionHandler().is_network_manager_running
         except (ModuleNotFoundError, ImportError):
@@ -109,17 +111,19 @@ class NMKillSwitch(KillSwitch):
                 capture_output=True,
                 check=True, shell=False
             )  # nosec B603:subprocess_without_shell_equals_true
+            is_libnetplan1_installed = True
         except (FileNotFoundError, subprocess.CalledProcessError):
             # if the apt command or the libnetplan1 package are not available then it's fine.
-            return True
+            pass
 
         # if libnetplan1 is installed (most probably ubuntu 24)
-        # and IPv6 is disabled then the KS backend becomes invalid.
-        if is_ipv6_disabled():
+        # and IPv6 is disabled then the KS backend won't work and we log it.
+        # Note: should be fixed once https://github.com/canonical/netplan/pull/495
+        # is merged and pushed to Ubuntu repos.
+        if is_libnetplan1_installed and is_ipv6_disabled():
             logger.error(
-                "Kill switch could not be enabled using libnetplan1 "
+                "Kill switch does not work with libnetplan1 "
                 "while IPv6 is disabled via the ipv6.disabled=1 kernel parameter."
             )
-            return False
 
         return True

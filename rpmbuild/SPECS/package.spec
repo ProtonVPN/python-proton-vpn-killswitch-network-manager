@@ -1,5 +1,5 @@
 %define unmangled_name proton-vpn-killswitch-network-manager
-%define version 0.5.3
+%define version 0.5.4
 %define release 1
 
 Prefix: %{_prefix}
@@ -52,6 +52,9 @@ python3 setup.py install --single-version-externally-managed -O1 --root=$RPM_BUI
 %defattr(-,root,root)
 
 %changelog
+* Tue Aug 13 2024 Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch> 0.5.4
+- Only log if kill switch backend is incompatible.
+
 * Mon Aug 12 2024 Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch> 0.5.3
 - Invert ipv6 detection logic.
 
