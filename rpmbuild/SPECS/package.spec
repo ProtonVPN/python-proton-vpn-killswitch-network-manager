@@ -1,5 +1,5 @@
 %define unmangled_name proton-vpn-killswitch-network-manager
-%define version 0.5.4
+%define version 0.6.0
 %define release 1
 
 Prefix: %{_prefix}
@@ -11,21 +11,19 @@ Summary: %{unmangled_name} library
 
 Group: ProtonVPN
 License: GPLv3
-Vendor: Proton Technologies AG <opensource@proton.me>
-URL: https://github.com/ProtonVPN/%{unmangled_name}
+Vendor: Proton AG <opensource@proton.me>
+URL: https://github.com/ProtonVPN/python-%{unmangled_name}
 Source0: %{unmangled_name}-%{version}.tar.gz
 BuildArch: noarch
 BuildRoot: %{_tmppath}/%{unmangled_name}-%{version}-%{release}-buildroot
 
-BuildRequires: python3-proton-vpn-api-core
-BuildRequires: python3-proton-vpn-logger
+BuildRequires: python3-proton-vpn-api-core >= 0.35.2
 BuildRequires: python3-setuptools
 BuildRequires: python3-gobject
 BuildRequires: NetworkManager
 BuildRequires: python3-packaging
 
-Requires: python3-proton-vpn-api-core
-Requires: python3-proton-vpn-logger
+Requires: python3-proton-vpn-api-core >= 0.35.2
 Requires: python3-gobject
 Requires: NetworkManager
 Requires: python3-packaging
@@ -52,6 +50,9 @@ python3 setup.py install --single-version-externally-managed -O1 --root=$RPM_BUI
 %defattr(-,root,root)
 
 %changelog
+* Mon Sep 23 2024 Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch> 0.6.0
+- Drop logger package.
+
 * Tue Aug 13 2024 Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch> 0.5.4
 - Only log if kill switch backend is incompatible.
 
