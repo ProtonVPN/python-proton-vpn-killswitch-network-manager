@@ -1,3 +1,9 @@
+proton-vpn-killswitch-network-manager (0.6.1) unstable; urgency=medium
+
+  * Deprecate package.
+
+ -- Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch>  Thu, 26 Sep 2024 10:00:00 +0000
+
 proton-vpn-killswitch-network-manager (0.6.0) unstable; urgency=medium
 
   * Drop logger package.

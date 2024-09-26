@@ -4,7 +4,7 @@ from setuptools import setup, find_namespace_packages
 
 setup(
     name="proton-vpn-killswitch-network-manager",
-    version="0.6.0",
+    version="0.6.1",
     description="Proton Technologies VPN connector for linux",
     author="Proton AG",
     author_email="opensource@proton.me",
@@ -15,11 +15,6 @@ setup(
     install_requires=["proton-vpn-api-core", "pygobject", "packaging"],
     extras_require={
         "development": ["wheel", "pytest", "pytest-cov", "pytest-asyncio", "flake8", "pylint"]
-    },
-    entry_points={
-        "proton_loader_killswitch": [
-            "networkmanager = proton.vpn.killswitch.backend.linux.networkmanager:NMKillSwitch",
-        ]
     },
     license="GPLv3",
     platforms="OS Independent",

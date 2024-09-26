@@ -1,5 +1,5 @@
 %define unmangled_name proton-vpn-killswitch-network-manager
-%define version 0.6.0
+%define version 0.6.1
 %define release 1
 
 Prefix: %{_prefix}
@@ -17,16 +17,18 @@ Source0: %{unmangled_name}-%{version}.tar.gz
 BuildArch: noarch
 BuildRoot: %{_tmppath}/%{unmangled_name}-%{version}-%{release}-buildroot
 
-BuildRequires: python3-proton-vpn-api-core >= 0.35.2
 BuildRequires: python3-setuptools
-BuildRequires: python3-gobject
 BuildRequires: NetworkManager
+BuildRequires: python3-gobject
 BuildRequires: python3-packaging
+BuildRequires: python3-proton-vpn-api-core >= 0.35.2
 
-Requires: python3-proton-vpn-api-core >= 0.35.2
-Requires: python3-gobject
 Requires: NetworkManager
+Requires: python3-gobject
 Requires: python3-packaging
+Requires: python3-proton-vpn-api-core >= 0.35.2
+
+Conflicts: python3-proton-vpn-network-manager < 0.9.0
 
 %{?python_disable_dependency_generator}
 
@@ -50,6 +52,9 @@ python3 setup.py install --single-version-externally-managed -O1 --root=$RPM_BUI
 %defattr(-,root,root)
 
 %changelog
+* Thu Sep 26 2024 Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch> 0.6.0
+- Deprecate package.
+
 * Mon Sep 23 2024 Alexandru Cheltuitor <alexandru.cheltuitor@proton.ch> 0.6.0
 - Drop logger package.
 

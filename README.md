@@ -1,3 +1,6 @@
+
+> :warning: **This module is now legacy**: The same functionality is now in python-proton-network-manager module, version `0.9.0` and upwards.
+
 # ProtonVPN Kill Switch Network Manager
 
 The `proton-vpn-killswitch-network-manager` component is the implementation of the `proton-vpn-killswitch` interface
